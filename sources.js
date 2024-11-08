@@ -1,5 +1,4 @@
 const { parse } = require("fast-html-parser");
-//const youtubedl = require("youtube-dl-exec");
 const config = require('./config');
 require('dotenv').config();
 const cheerio = require('cheerio');
@@ -24,9 +23,6 @@ client = axios.create({
 async function stream(einthusan_id) {
     try {
         const id = einthusan_id.split(":")[1];
-        const Cached = StreamCache.get(id);
-        if (Cached) return Cached;
-
         const url = `${config.BaseURL}/movie/watch/${id}/`;
         const res = await client.get(url);
 
@@ -86,9 +82,9 @@ async function stream(einthusan_id) {
         if (streams.length === 0) {
             throw new Error("No video source found");
         }
-
+               
         // Return the streams in the specified JSON format
-        return { streams: { streams } }; // Return the streams in the desired nested structure
+        return { streams }; // Return the streams in a flat structure
 
     } catch (e) {
         console.error("Error in stream function:", e);

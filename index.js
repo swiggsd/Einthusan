@@ -141,27 +141,30 @@ app.get('/:configuration?/meta/movie/:id/:extra?.json', async (req, res) => {
 	}
 })
 app.get('/:configuration?/stream/movie/:id/:extra?.json', async (req, res) => {
+    res.setHeader('Cache-Control', 'max-age=86400,staleRevalidate=stale-while-revalidate, staleError=stale-if-error, public');
+    res.setHeader('Content-Type', 'application/json');
+    
+    try {
+        console.log(req.params);
+        const { id } = req.params;
+        let streams;
 
-	res.setHeader('Cache-Control', 'max-age=86400,staleRevalidate=stale-while-revalidate, staleError=stale-if-error, public');
-	res.setHeader('Content-Type', 'application/json');
-	try {
-		console.log(req.params);
-		const { id } = req.params;
-		let streams;
+        if (id.startsWith("einthusan_id:")) {
+            streams = await sources.stream(id);
+        }
 
-		if (id.startsWith("einthusan_id:")) {
-			streams = await sources.stream(id)
-		}
-
-		if (streams) res.send({ streams: streams })
-		else res.send({ streams: [] })
-		res.end();
-
-		res.end();
-	} catch (e) {
-		console.error(e)
-	}
-})
+        // Check if streams is an object with a streams property
+        if (streams && Array.isArray(streams.streams)) {
+            res.send({ streams: streams.streams }); // Send the inner streams array directly
+        } else {
+            res.send({ streams: [] }); // Send an empty array if no streams found
+        }
+        
+    } catch (e) {
+        console.error(e);
+        res.status(500).send({ error: 'Internal Server Error' }); // Send an error response
+    }
+});
 
 
 module.exports = app
