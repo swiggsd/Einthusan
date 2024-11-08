@@ -1,7 +1,7 @@
 {
 	"name": "stremio-einthusantv",
-	"version": "0.2.1",
-	"description": "einthusanTV by dexter21767",
+	"version": "0.3.1",
+	"description": "EinthusanTV by Asaddon",
 	"scripts": {
 		"start": "node server.js",
 		"dev": "nodemon server.js"
@@ -18,7 +18,7 @@
 		"stremio-addon-sdk": "latest",
 		"swagger-stats": "^0.99.4",
 		"winston-daily-rotate-file": "^4.7.1",
-		"youtube-dl-exec": "^2.1.11"
+		"cheerio": "latest"
 	},
 	"devDependencies": {
 		"nodemon": "latest"

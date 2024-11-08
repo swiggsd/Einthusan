@@ -1,8 +1,8 @@
 const { parse } = require("fast-html-parser");
-const youtubedl = require("youtube-dl-exec");
+//const youtubedl = require("youtube-dl-exec");
 const config = require('./config');
 require('dotenv').config();
-
+const cheerio = require('cheerio');
 const axios = require('axios').default;
 
 
@@ -27,26 +27,71 @@ async function stream(einthusan_id) {
         const Cached = StreamCache.get(id);
         if (Cached) return Cached;
 
-        let url = `${config.BaseURL}/movie/watch/${id}/`;
+        const url = `${config.BaseURL}/movie/watch/${id}/`;
+        const res = await client.get(url);
 
-        let info = await youtubedl(url, {
-            dumpSingleJson: true,
-            simulate: true,
-            skipDownload: true,
-            noDownload: true,
-        });
-        //console.log(info)
-        if (!info) throw "error on youtubedl";
+        // Check the response status
+        if (res.status !== 200) {
+            throw new Error(`Failed to fetch the page. Status code: ${res.status}`);
+        }
 
-        let streams = {
-            url: info.url,
+        // Parse the HTML response
+        const $ = cheerio.load(res.data);
+
+        // Extract the video section element
+        const videoSection = $('#UIVideoPlayer');
+        let title = videoSection.attr("data-content-title");
+        // Check if the video section is found
+        if (!videoSection.length) {
+            throw new Error("Video player section not found in the HTML.");
+        }
+
+        // Extract the MP4 link
+        let mp4Link = videoSection.attr('data-mp4-link');
+
+        // Log extracted link for debugging
+        console.log("MP4 Link:", mp4Link);
+
+        // Function to replace IP address in a given link
+        const replaceIpInLink = (link) => {
+            const ipRegex = /\b(?:\d{1,3}\.){3}\d{1,3}\b/;
+            const ipMatch = link.match(ipRegex);
+            
+            if (ipMatch) {
+                const ipAddress = ipMatch[0];
+                console.log("Extracted IP Address:", ipAddress);
+                const newBaseUrl = 'cdn1.einthusan.io';
+                return link.replace(ipAddress, newBaseUrl);
+            } else {
+                console.log("No IP address found in link:", link);
+            }
+            return link; // Return the original link if no IP is found
         };
-        //console.log(streams)
-        if (streams) StreamCache.set(id, streams);
-        return streams;
+
+        const streams = []; // Array to hold stream objects
+
+        // Process MP4 link
+        if (mp4Link) {
+            mp4Link = replaceIpInLink(mp4Link);
+            console.log("Modified MP4 Link:", mp4Link);
+
+            streams.push({
+                url: mp4Link,
+                name: 'EinthusanTV', // Changed to match your JSON structure
+                title: title,  // You can set this dynamically if needed
+            });
+        }
+
+        // Check if any streams were found
+        if (streams.length === 0) {
+            throw new Error("No video source found");
+        }
+
+        // Return the streams in the specified JSON format
+        return { streams: { streams } }; // Return the streams in the desired nested structure
 
     } catch (e) {
-        console.error(e);
+        console.error("Error in stream function:", e);
         return Promise.reject(e);
     }
 }
