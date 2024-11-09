@@ -240,8 +240,73 @@ async function getcatalogresults(url) {
     }
 }
 
+async function getAllRecentHindiMovies(maxPages = 5) {
+    const baseUrl = "https://einthusan.tv/movie/results/?find=Recent&lang=hindi&page=";
+    const resultsArray = [];
+
+    try {
+        for (let page = 1; page <= maxPages; page++) {
+            const url = baseUrl + page;
+            const cachedResults = CatalogCache.get(url);
+            if (cachedResults) {
+                resultsArray.push(...cachedResults);
+                continue; // Skip fetching if cached
+            }
+
+            const res = await client.get(url);
+            if (!res || !res.data) {
+                console.error(`Failed to get catalog results for page ${page}: No data received`);
+                continue; // Continue to the next page instead of breaking
+            }
+
+            const html = parse(res.data);
+            const movieList = html.querySelector("#UIMovieSummary");
+            if (!movieList) continue; // Continue if no movie list found
+
+            const searchResults = movieList.querySelectorAll("li");
+            if (searchResults.length === 0) continue; // Continue if no more results
+
+            for (const item of searchResults) {
+                const img = item.querySelector("div.block1 a img").rawAttributes['src'];
+                const year = item.querySelector("div.info p").childNodes[0].rawText;
+                const title = item.querySelector("a.title h3").rawText;
+                const id = item.querySelector("a.title").rawAttributes['href'];
+
+                // Check for duplicates before adding to results
+                if (!resultsArray.some(movie => movie.id === "einthusan_id:" + id.split('/')[3])) {
+                    resultsArray.push({
+                        id: "einthusan_id:" + id.split('/')[3],
+                        type: "movie",
+                        name: title,
+                        poster: "https:" + img,
+                        releaseInfo: year,
+                        posterShape: 'poster'
+                    });
+                }
+            }
+
+            // Cache the results for the current page only if there are valid results
+            if (searchResults.length) CatalogCache.set(url, resultsArray);
+        }
+
+        console.log('Recent Hindi Movies:', resultsArray);
+        return resultsArray;
+
+    } catch (e) {
+        console.error('An error occurred:', e);
+        return []; // Return an empty array on error
+    }
+}
+
+//getAllRecentHindiMovies(3).then(movies => {
+ //  console.log("Fetched Movies:", movies);
+//}).catch(error => {
+  //  console.error("Error fetching movies:", error);
+//});
+
 module.exports = {
     search,
     meta,
-    stream
+    stream,
+    getAllRecentHindiMovies
 };
