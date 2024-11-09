@@ -183,9 +183,7 @@ async function search(lang, slug) {
     try {
         const CacheID = slug + "_" + lang
         slug = encodeURI(slug);
-
-        lang = lang.substring(0, lang.length - 6);
-
+     
         const url = `/movie/results/?lang=${lang}&query=${slug}`;
         console.log('search url:', url);
         let res = cache.get(CacheID);
