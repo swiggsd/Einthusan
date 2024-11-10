@@ -7,7 +7,7 @@
 	"background":"https://raw.githubusercontent.com/Stremio/stremio-art/main/originals/Ahlen%20Ken%20A.%20Batalon.png",
     "contactEmail": "ahmidiyasser@gmail.com",
     "catalogs": [],
-    "resources": ["stream","meta"],
+    "resources": ["stream","meta","catalog"],
     "types": ["movie"],
     "idPrefixes": ["einthusan_id"],
     "behaviorHints": {

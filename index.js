@@ -97,30 +97,46 @@ app.get('/:configuration?/manifest.json', (req, res) => {
 });
 
 app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
-	res.setHeader('Cache-Control', 'max-age=86400,staleRevalidate=stale-while-revalidate, staleError=stale-if-error, public');
-	res.setHeader('Content-Type', 'application/json');
-	try {
-		console.log(req.params);
-		let { id, extra } = req.params;
-		let metas;
-		if (!langs.includes(id)) {
-			id = id.split('movies')[0];
-			if (!id || !langs.includes(id)) throw new Error("invalide catalog id");
-		}
-		if (extra) extra = new URLSearchParams(extra);
-		console.log(extra)
-		if (extra.has("search")) {
-			console.log(extra.get("search"))
-			metas = await sources.search(id, extra.get("search"))
-		}
-		if (metas) res.send({ metas: metas })
-		else res.send({ metas: [] })
-		res.end();
+    res.setHeader('Cache-Control', 'max-age=86400, staleRevalidate=stale-while-revalidate, staleError=stale-if-error, public');
+    res.setHeader('Content-Type', 'application/json');
 
-	} catch (e) {
-		console.error(e)
-	}
-})
+    try {
+        console.log(req.params);
+        let { id, extra } = req.params;
+        let metas;
+
+        // Validate the catalog ID
+        if (!langs.includes(id)) {
+            id = id.split('movies')[0];
+            if (!id || !langs.includes(id)) {
+                return res.status(400).send({ error: "Invalid catalog ID" }); // Return error response
+            }
+        }
+
+        // Parse extra parameters
+        if (extra) extra = new URLSearchParams(extra);
+        console.log(extra);
+
+        // Handle search if applicable
+        if (extra && extra.has("search")) {
+            console.log(extra.get("search"));
+            metas = await sources.search(id, extra.get("search"));
+        }
+
+        // If metas were found, send them
+        if (metas) {
+            return res.send({ metas: metas });
+        }
+
+        // If no metas found, get recent movies
+        const recentMovies = await sources.getAllRecentMovies();
+        return res.send({ metas: recentMovies });
+
+    } catch (e) {
+        console.error(e);
+        return res.status(500).send({ error: 'An error occurred while processing your request.' });
+    }
+});
 app.get('/:configuration?/meta/movie/:id/:extra?.json', async (req, res) => {
 
 	res.setHeader('Cache-Control', 'max-age=86400,staleRevalidate=stale-while-revalidate, staleError=stale-if-error, public');

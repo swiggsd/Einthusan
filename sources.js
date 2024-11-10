@@ -240,7 +240,7 @@ async function getcatalogresults(url) {
     }
 }
 
-async function getAllRecentHindiMovies(maxPages = 5) {
+async function getAllRecentMovies(maxPages = 5) {
     const baseUrl = "https://einthusan.tv/movie/results/?find=Recent&lang=hindi&page=";
     const resultsArray = [];
 
@@ -298,7 +298,7 @@ async function getAllRecentHindiMovies(maxPages = 5) {
     }
 }
 
-//getAllRecentHindiMovies(3).then(movies => {
+//getAllRecentMovies(3).then(movies => {
  //  console.log("Fetched Movies:", movies);
 //}).catch(error => {
   //  console.error("Error fetching movies:", error);
@@ -308,5 +308,5 @@ module.exports = {
     search,
     meta,
     stream,
-    getAllRecentHindiMovies
+    getAllRecentMovies
 };
