@@ -83,12 +83,12 @@ app.get('/:configuration?/manifest.json', (req, res) => {
 
 		"id": `${configuration}`,
 
-		"name": `movies - ${configuration}`,
+		"name": `EinthusanTV - ${configuration}`,
 
 		"extra":
 			[{
 				"name": "search",
-				"isRequired": true
+				"isRequired": false
 			}
 			]
 	}];
