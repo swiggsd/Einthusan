@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 	if (!req.timedout) next()
 });
 
-console.log(`Swagger-Stats accessible at: ${config.local}/swagger-stats`)
+//console.log(`Swagger-Stats accessible at: ${config.local}/swagger-stats`)
 
 app.use('/logs',
 	(req, res, next) => {
@@ -102,7 +102,7 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
 
     try {
         console.log(req.params);
-        let { id, extra } = req.params;
+        let { id, extra, configuration } = req.params;
         let metas;
 
         // Validate the catalog ID
@@ -120,7 +120,7 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
         // Handle search if applicable
         if (extra && extra.has("search")) {
             console.log(extra.get("search"));
-            metas = await sources.search(id, extra.get("search"));
+            metas = await sources.search(id, configuration, extra.get("search"));
         }
 
         // If metas were found, send them
@@ -143,10 +143,10 @@ app.get('/:configuration?/meta/movie/:id/:extra?.json', async (req, res) => {
 	res.setHeader('Content-Type', 'application/json');
 	try {
 		console.log(req.params);
-		const { id } = req.params;
+		const { id , configuration} = req.params;
 		let meta;
-		if (id.startsWith("einthusan_id:")) {
-			meta = await sources.meta(id)
+		if (id.startsWith("einthusan_id:") || id.startsWith("tt")) {
+			meta = await sources.meta(id, configuration)
 		}
 		if (meta) res.send({ meta: meta })
 		else res.send({ meta: [] })
@@ -162,11 +162,12 @@ app.get('/:configuration?/stream/movie/:id/:extra?.json', async (req, res) => {
     
     try {
         console.log(req.params);
-        const { id } = req.params;
+        const { id, configuration } = req.params;
+		console.log(id);
         let streams;
 
-        if (id.startsWith("einthusan_id:")) {
-            streams = await sources.stream(id);
+        if (id.startsWith("einthusan_id:") || id.startsWith("tt")) {
+            streams = await sources.stream(id, configuration);
         }
 
         // Check if streams is an object with a streams property
