@@ -1,4 +1,4 @@
-const { parse } = require("fast-html-parser");
+const { parse } = require("node-html-parser");
 const config = require('./config');
 require('dotenv').config();
 const cheerio = require('cheerio');
