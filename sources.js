@@ -5,7 +5,6 @@ const cheerio = require('cheerio');
 const axios = require('axios').default;
 const nameToImdb = require("name-to-imdb");
 const NodeCache = require("node-cache");
-
 const cacheTTL = 30 * 60; // Cache TTL set to 30 minutes
 const cache = new NodeCache({ stdTTL: cacheTTL, checkperiod: 60 * 60 });
 const client = axios.create({
@@ -133,7 +132,6 @@ async function search(lang, slug) {
         slug = encodeURIComponent(slug);
         const url = `/movie/results/?lang=${lang}&query=${slug}`;
         console.log('search url:', url);
-
         let res = cache.get(cacheID);
         if (!res) {
             res = await getcatalogresults(url);
@@ -160,10 +158,16 @@ async function getcatalogresults(url) {
         const resultsArray = [];
 
         for (const item of searchResults) {
-            const img = item.querySelector("div.block1 a img")?.rawAttributes?.src;
-            const year = item.querySelector("div.info p")?.childNodes[0]?.rawText.trim();
-            const title = item.querySelector("a.title h3")?.rawText.trim();
-            const einthusanId = item.querySelector("a.title")?.rawAttributes?.href.split('/')[3];
+            // Check for the existence of each element before accessing its properties
+            const imgElement = item.querySelector("div.block1 a img");
+            const infoElement = item.querySelector("div.info p");
+            const titleElement = item.querySelector("a.title h3");
+            const idElement = item.querySelector("a.title");
+
+            const img = imgElement ? imgElement.rawAttributes?.src : null;
+            const year = infoElement && infoElement.childNodes[0] ? infoElement.childNodes[0].rawText.trim() : null;
+            const title = titleElement ? titleElement.rawText.trim() : null;
+            const einthusanId = idElement ? idElement.rawAttributes?.href.split('/')[3] : null;
 
             if (img && year && title && einthusanId) {
                 const imdbId = await getImdbId(title);
@@ -222,7 +226,6 @@ async function getEinthusanIdByTitle(title, lang) {
 async function getAllRecentMovies(maxPages = 5) {
     const baseUrl = "https://einthusan.tv/movie/results/?find=Recent&lang=hindi&page=";
     const resultsArray = [];
-
     try {
         for (let page = 1; page <= maxPages; page++) {
             const url = `${baseUrl}${page}`;
@@ -246,23 +249,31 @@ async function getAllRecentMovies(maxPages = 5) {
             if (searchResults.length === 0) continue; // Continue if no more results
 
             for (const item of searchResults) {
-                const img = item.querySelector("div.block1 a img").rawAttributes['src'];
-                const year = item.querySelector("div.info p").childNodes[0].rawText;
-                const title = item.querySelector("a.title h3").rawText;
-                const id = item.querySelector("a.title").rawAttributes['href'];
+                const imgElement = item.querySelector("div.block1 a img");
+                const infoElement = item.querySelector("div.info p");
+                const titleElement = item.querySelector("a.title h3");
+                const idElement = item.querySelector("a.title");
 
-                const einthusanId = id.split('/')[3];
-                if (!resultsArray.some(movie => movie.EinthusanID === einthusanId)) {
-                    const imdbId = await getImdbId(title);
-                    resultsArray.push({
-                        id: imdbId,
-                        EinthusanID: einthusanId,
-                        type: "movie",
-                        name: title,
-                        poster: `https:${img}`,
-                        releaseInfo: year,
-                        posterShape: 'poster',
-                    });
+                // Check if elements exist before accessing their properties
+                const img = imgElement ? imgElement.rawAttributes['src'] : null;
+                const year = infoElement ? infoElement.childNodes[0].rawText : null;
+                const title = titleElement ? titleElement.rawText : null;
+                const id = idElement ? idElement.rawAttributes['href'] : null;
+
+                if (img && year && title && id) {
+                    const einthusanId = id.split('/')[3];
+                    if (!resultsArray.some(movie => movie.EinthusanID === einthusanId)) {
+                        const imdbId = await getImdbId(title);
+                        resultsArray.push({
+                            id: imdbId,
+                            EinthusanID: einthusanId,
+                            type: "movie",
+                            name: title,
+                            poster: `https:${img}`,
+                            releaseInfo: year,
+                            posterShape: 'poster',
+                        });
+                    }
                 }
             }
 
