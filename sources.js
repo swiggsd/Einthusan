@@ -48,12 +48,12 @@ const replaceIpInLink = (link) => {
 };
 
 // Stream function to get video streams
-async function stream(einthusan_id) {
+async function stream(einthusan_id, lang) {
     try {
         if (einthusan_id.startsWith("tt")) {
             const title = await ttnumberToTitle(einthusan_id);
             if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
-            einthusan_id = await getEinthusanIdByTitle(title, 'hindi');
+            einthusan_id = await getEinthusanIdByTitle(title, lang);
         }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
@@ -223,8 +223,8 @@ async function getEinthusanIdByTitle(title, lang) {
 }
 
 // Function to get all recent movies
-async function getAllRecentMovies(maxPages = 5) {
-    const baseUrl = "https://einthusan.tv/movie/results/?find=Recent&lang=hindi&page=";
+async function getAllRecentMovies(maxPages, lang) {
+    const baseUrl = `https://einthusan.tv/movie/results/?find=Recent&lang=${lang}&page=`;
     const resultsArray = [];
     try {
         for (let page = 1; page <= maxPages; page++) {
@@ -280,7 +280,7 @@ async function getAllRecentMovies(maxPages = 5) {
             if (searchResults.length) cache.set(url, resultsArray);
         }
 
-        console.log('Recent Hindi Movies:', resultsArray);
+        console.log(`Recent ${lang} Movies:`, resultsArray);
         return resultsArray;
 
     } catch (e) {

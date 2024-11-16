@@ -72,6 +72,11 @@ app.get('/manifest.json', (_, res) => {
     return res.json(manifest);
 });
 
+// Utility function to capitalize the first letter
+function capitalizeFirstLetter(string) {
+    if (!string) return ''; // Handle empty strings
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
 // Serve configuration-specific manifest.json
 app.get('/:configuration?/manifest.json', (req, res) => {
     const { configuration } = req.params;
@@ -83,7 +88,7 @@ app.get('/:configuration?/manifest.json', (req, res) => {
         manifest.catalogs = [{
             type: "movie",
             id: configuration,
-            name: `EinthusanTV - ${configuration}`,
+            name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`, // Capitalize the first letter
             extra: [{ name: "search", isRequired: false }]
         }];
         return res.json(manifest);
@@ -121,7 +126,7 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
 
         // If no metas found, get recent movies
         if (!metas) {
-            metas = await sources.getAllRecentMovies();
+            metas = await sources.getAllRecentMovies(5, configuration);
         }
 
         return res.json({ metas });
