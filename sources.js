@@ -62,14 +62,16 @@ async function stream(einthusan_id, lang) {
 
         const $ = cheerio.load(res.data);
         const videoSection = $('#UIVideoPlayer');
+        const videoDetails = $(`#UIMovieSummary`);
         if (!videoSection.length) throw new Error("Video player section not found in the HTML.");
 
         const title = videoSection.attr("data-content-title");
+        const year = videoDetails.find("div.info p").contents().get(0).data.trim();
         let mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
-
+        console.log(`Fetched Stream Link:`, mp4Link);
         if (!mp4Link) throw new Error("No video source found");
 
-        return { streams: [{ url: mp4Link, name: 'EinthusanTV', title }] };
+        return { streams: [{ url: mp4Link, name: 'EinthusanTV', title: `${title} (${year})` }] };
     } catch (e) {
         console.error("Error in stream function:", e);
         throw e; // Re-throw the error for upstream handling
