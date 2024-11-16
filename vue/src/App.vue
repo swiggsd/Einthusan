@@ -31,17 +31,17 @@
                     <!-- Modal body -->
                     <div class="p-6 space-y-6">
                         <p class="text-base leading-relaxed text-gray-500 dark:text-gray-400">
-                            Hello guys, if you enjoy this addon and want to keep working, and want new features to be
+                            Hello guys, if you enjoy this addon and want it to keep working, and want new features to be
                             added <br>Then please consider donating.</p>
                         <div style="align-items: center; display: flex; justify-content: center;">
                             <div style="margin: auto">
                                 <p>Buymeacoffee.com</p>
-                                <a href="https://www.buymeacoffee.com/dexter21767"><img
-                                        src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=dexter21767&button_colour=FF5F5F&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
+                                <a href="https://www.buymeacoffee.com/asaddon"><img
+                                        src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=asaddon&button_colour=FF5F5F&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
                             </div>
                             <div style="margin: auto">
                                 <p>Ko-fi.com</p>
-                                <a href='https://ko-fi.com/G2G0H5KL5' target='_blank'><img height='36'
+                                <a href='https://ko-fi.com/W7W2166YEP' target='_blank'><img height='36'
                                         style='border:0px;height:36px;'
                                         src='https://storage.ko-fi.com/cdn/kofi3.png?v=3' border='0'
                                         alt='Buy Me a Coffee at ko-fi.com' />
@@ -87,7 +87,7 @@
                         <div class="items-center mt-5 description">
                             <h2 class="font-semibold text-lg mr-auto">This addon has more:</h2>
                             <ul>
-                                <li>Subtitles</li>
+                                <li>Recent Movies Catalog Show</li>
                             </ul>
                         </div>
 
@@ -135,9 +135,9 @@
                         </div>
 
                         <div class="flex flex-col mt-5" style="align-items: center;">
-                            <p class="text-center">This addon was created by:
-                                <a href="https://github.com/dexter21767" target="_blank" class="text-purple-700"><b
-                                        style="font-weight: 600;">dexter21767</b></a><br />
+                            <p class="text-center">This addon was recreated by:
+                                <a href="https://github.com/asaddon" target="_blank" class="text-purple-700"><b
+                                        style="font-weight: 600;">asaddon</b></a><br />
                                 UI by:
                                 <a href="https://github.com/rleroi" target="_blank" class="text-purple-700"><b
                                         style="font-weight: 600;">rab1t</b></a><br />
