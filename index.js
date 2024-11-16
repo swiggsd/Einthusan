@@ -6,20 +6,19 @@ const serveIndex = require('serve-index');
 const sources = require("./sources");
 const config = require('./config');
 const manifest = require("./manifest");
-
+require('dotenv').config();
 const app = express();
 const langs = ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"];
 
 app.set('trust proxy', true);
-
 // Middleware for Swagger Stats
 app.use(swStats.getMiddleware({
     name: manifest.name,
     version: manifest.version,
     authentication: true,
     onAuthenticate: (req, username, password) => {
-        const User = process.env.USER || 'stremio';
-        const Pass = process.env.PASS || 'stremioIsTheBest';
+        const User = process.env.API_USER;
+        const Pass = process.env.API_PASS;
         return username === User && password === Pass;
     }
 }));
@@ -35,16 +34,6 @@ app.use((req, res, next) => {
     });
     if (!req.timedout) next();
 });
-
-// Serve logs with cache control
-app.use('/logs', 
-    (req, res, next) => {
-        res.set('Cache-Control', 'no-store');
-        next();
-    },
-    express.static(path.join(__dirname, 'logs'), { etag: false }),
-    serveIndex('logs', { icons: true, view: 'details' })
-);
 
 // Serve static files
 app.use('/configure', express.static(path.join(__dirname, 'vue', 'dist')));

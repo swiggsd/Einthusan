@@ -18,8 +18,7 @@
 		"node-cache": "latest",
 		"serve-index": "latest",
 		"stremio-addon-sdk": "latest",
-		"swagger-stats": "latest",
-		"winston-daily-rotate-file": "latest"
+		"swagger-stats": "latest"
 	},
 	"devDependencies": {
 		"nodemon": "latest"
