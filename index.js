@@ -26,7 +26,7 @@ app.use(swStats.getMiddleware({
 
 // Timeout middleware
 app.use((req, res, next) => {
-    req.setTimeout(25 * 1000); // Set timeout to 25 seconds
+    req.setTimeout(40 * 1000); // Set timeout to 40 seconds
     req.socket.removeAllListeners('timeout');
     req.socket.once('timeout', () => {
         req.timedout = true;

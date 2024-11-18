@@ -9,7 +9,7 @@ const cacheTTL = 30 * 60; // Cache TTL set to 30 minutes
 const cache = new NodeCache({ stdTTL: cacheTTL, checkperiod: 60 * 60 });
 const client = axios.create({
     baseURL: config.BaseURL,
-    timeout: 10000,
+    timeout: 40000,
 });
 
 // Utility function to normalize titles for comparison

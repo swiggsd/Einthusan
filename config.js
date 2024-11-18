@@ -1,19 +1,22 @@
-var env = process.env.NODE_ENV ? 'beamup':'local';
-config.port = process.env.PORT;
+const env = process.env.NODE_ENV || 'local';
+
 let config = {
-    BaseURL: "https://einthusan.tv"
-}
+    BaseURL: "https://einthusan.tv",
+    port: env === 'local' ? 3000 : process.env.PORT, // Use dynamic port for Dokku
+    local: ''
+};
 
 switch (env) {
     case 'beamup':
-		config.port = process.env.PORT
-        config.local = "https://2ecbbd610840-einthusantv.baby-beamup.club"
+        config.local = "https://5108ff3389fc-einthusantv.baby-beamup.club";
         break;
 
     case 'local':
-		config.port = 3000
-        config.local = "http://127.0.0.1:" + config.port;
+        config.local = `http://127.0.0.1:${config.port}`; // Use local port for development
         break;
+
+    default:
+        throw new Error(`Unknown environment: ${env}`); // Catch unexpected environments
 }
 
 module.exports = config;
