@@ -15,6 +15,7 @@ app.set('trust proxy', true);
 app.use(swStats.getMiddleware({
     name: manifest.name,
     version: manifest.version,
+    uriPath: '/stats', 
     authentication: true,
     onAuthenticate: (req, username, password) => {
         const User = process.env.API_USER;
