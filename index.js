@@ -75,12 +75,22 @@ app.get('/:configuration?/manifest.json', (req, res) => {
 
     if (langs.includes(configuration)) {
         manifest.behaviorHints.configurationRequired = false;
-        manifest.catalogs = [{
-            type: "movie",
-            id: configuration,
-            name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`, // Capitalize the first letter
-            extra: [{ name: "search", isRequired: false }]
-        }];
+        manifest.catalogs = [
+            {
+                // Catalog with search (requires search to show)
+                type: "movie",
+                id: configuration,
+                name: `EinthusanTV - Search - ${capitalizeFirstLetter(configuration)}`,
+                extra: [{ name: "search", isRequired: true }] // Requires search query
+            },
+            {
+                // Catalog without search (always visible)
+                type: "movie",
+                id: `${configuration}_board`,
+                name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`,
+                extra: [] // No search parameter required
+            }
+        ];
         return res.json(manifest);
     }
     
@@ -99,9 +109,8 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
     try {
         const { id, extra, configuration } = req.params;
         let metas;
-
         // Validate the catalog ID
-        const catalogId = langs.includes(id) ? id : id.split('movies')[0];
+        const catalogId = langs.includes(id) ? id : id.split('_')[0]; 
         if (!langs.includes(catalogId)) {
             return res.status(400).send({ error: "Invalid catalog ID" });
         }
@@ -123,24 +132,6 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
     } catch (e) {
         console.error(e);
         return res.status(500).send({ error: 'An error occurred while processing your request.' });
-    }
-});
-
-// Handle movie metadata requests
-app.get('/:configuration?/meta/movie/:id/:extra?.json', async (req, res) => {
-    setCommonHeaders(res);
-    try {
-        const { id, configuration } = req.params;
-        let meta;
-
-        if (id.startsWith("einthusan_id:") || id.startsWith("tt")) {
-            meta = await sources.meta(id, configuration);
-        }
-
-        return res.json({ meta: meta || [] });
-    } catch (e) {
-        console.error(e);
-        return res.status(500).send({ error: 'Internal Server Error' });
     }
 });
 

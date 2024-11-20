@@ -78,54 +78,7 @@ async function stream(einthusan_id, lang) {
     }
 }
 
-// Metadata function to get movie metadata
-async function meta(einthusan_id, lang) {
-    try {
-        if (einthusan_id.startsWith("tt")) {
-            const title = await ttnumberToTitle(einthusan_id);
-            if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
-            einthusan_id = await getEinthusanIdByTitle(title, lang);
-        }
 
-        if (!einthusan_id) throw new Error("Invalid Einthusan ID format or undefined ID.");
-
-        const cachedMeta = cache.get(einthusan_id);
-        if (cachedMeta) return cachedMeta;
-
-        const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-        const res = await client.get(url);
-        if (!res || !res.data) throw new Error("Error requesting metadata");
-
-        const html = parse(res.data);
-        const movieDescription = html.querySelector("#UIMovieSummary").querySelector("li");
-        const img = movieDescription.querySelector("div.block1 a img").rawAttributes['src'];
-        const year = movieDescription.querySelector("div.info p").childNodes[0].rawText;
-        const title = movieDescription.querySelector("a.title h3").rawText;
-        const description = movieDescription.querySelector("p.synopsis").rawText;
-        const actorsArray = html.querySelectorAll("div.prof p");
-        const trailer = html.querySelectorAll("div.extras a")[1]?.rawAttributes['href']?.split("v=")[1] || false;
-
-        const actors = actorsArray.map(actor => actor.rawText);
-        const metaObj = {
-            id: einthusan_id,
-            name: title,
-            posterShape: 'poster',
-            type: 'movie',
-            releaseInfo: year,
-            poster: img ? `https:${img}` : null,
-            background: img ? `https:${img}` : null,
-            description,
-            cast: actors,
-            trailers: trailer ? [{ source: trailer, type: "Trailer" }] : []
-        };
-
-        cache.set(einthusan_id, metaObj);
-        return metaObj;
-    } catch (e) {
-        console.error("Error in meta function:", e);
-        throw e; // Re-throw the error for upstream handling
-    }
-}
 
 // Search function to find movies
 async function search(lang, slug) {
@@ -293,7 +246,6 @@ async function getAllRecentMovies(maxPages, lang) {
 
 module.exports = {
     search,
-    meta,
     stream,
     getAllRecentMovies
 };

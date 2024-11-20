@@ -1,14 +1,8 @@
-# ignore ALL .log files
-*.log
-/node_modules
-
-# ignore ALL .log files
 *.log
 /logs
 /node_modules
 /res
 /beamup.json
-#/server.js
 /beamup.json
 /package-lock.json
 .gitattributes
