@@ -18,7 +18,7 @@ const cache = new NodeCache({
 // Create axios instance with optimized settings
 const client = axios.create({
     baseURL: config.BaseURL,
-    timeout: 40000,
+    timeout: 1200000,
     headers: {
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive'
