@@ -333,15 +333,13 @@ async function getAllRecentMovies(maxPages, lang) {
                 // Log response status for debugging
                 console.log(`Response status for page ${page}: ${response.status}`);
                 
-                if (response.status === 429) { // Rate limited
-                    console.error(`Rate limited on page ${page}. Waiting for 60 seconds before retrying...`);
-                    await sleep(60000); // Wait for 60 seconds
-                    return fetchPage(page, retries);
-                }
-
-                if (response.status !== 200) {
-                    console.error(`Failed to fetch page ${page}: Status ${response.status}`);
-                    return []; // Return empty array for failed requests
+                if (response.status === 200) {
+                    const body = response.data; // Adjust based on your response format
+                    if (body.includes('<title>Rate Limited - Einthusan</title>')) {
+                        console.error(`Rate limited on page ${page}. Waiting for 10 seconds before retrying...`);
+                        await sleep(10000); // Wait for 10 seconds
+                        return fetchPage(page, lang, retries); // Retry the same page
+                    }
                 }
 
                 // Check if response data is empty
