@@ -125,7 +125,7 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
 
         // If no metas found, get recent movies
         if (!metas) {
-            metas = await sources.getAllRecentMovies(10, configuration);
+            metas = await sources.getAllRecentMovies(15, configuration);
         }
 
         return res.json({ metas });
