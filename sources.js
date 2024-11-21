@@ -6,7 +6,7 @@ const axios = require('axios');
 const nameToImdb = require("name-to-imdb");
 const NodeCache = require("node-cache");
 const { promisify } = require('util');
-
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // Enhanced caching configuration
 const cache = new NodeCache({
     stdTTL: 30 * 60, // 30 minutes default TTL
@@ -57,7 +57,7 @@ const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
 // Implement request queue to prevent rate limiting
 class RequestQueue {
-    constructor(concurrency = 5) {
+    constructor(concurrency = 20) {
         this.queue = [];
         this.running = 0;
         this.concurrency = concurrency;
@@ -303,6 +303,8 @@ async function getEinthusanIdByTitle(title, lang) {
 }
 
 // Optimized function to get all recent movies with parallel processing
+
+
 async function getAllRecentMovies(maxPages, lang) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
@@ -327,10 +329,26 @@ async function getAllRecentMovies(maxPages, lang) {
             try {
                 console.log(`Fetching page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
-                
-                // Log response status and data for debugging
+
+                // Log response status for debugging
                 console.log(`Response status for page ${page}: ${response.status}`);
-                console.log(`Response data for page ${page}:`, response.data);
+                
+                if (response.status === 429) { // Rate limited
+                    console.error(`Rate limited on page ${page}. Waiting for 60 seconds before retrying...`);
+                    await sleep(60000); // Wait for 60 seconds
+                    return fetchPage(page, retries);
+                }
+
+                if (response.status !== 200) {
+                    console.error(`Failed to fetch page ${page}: Status ${response.status}`);
+                    return []; // Return empty array for failed requests
+                }
+
+                // Check if response data is empty
+                if (!response.data || response.data.trim().length === 0) {
+                    console.warn(`Empty response data for page ${page}.`);
+                    return [];
+                }
 
                 const html = parse(response.data);
                 const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
@@ -380,6 +398,8 @@ async function getAllRecentMovies(maxPages, lang) {
                     console.error(`Error fetching page ${page} after multiple attempts:`, err);
                     return [];
                 }
+            } finally {
+                await sleep(2000); // Delay between requests to avoid rate limiting
             }
         };
 
