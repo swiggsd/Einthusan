@@ -57,7 +57,7 @@ const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
 // Implement request queue to prevent rate limiting
 class RequestQueue {
-    constructor(concurrency = 30) {
+    constructor(concurrency = 10) {
         this.queue = [];
         this.running = 0;
         this.concurrency = concurrency;
