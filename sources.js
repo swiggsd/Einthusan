@@ -57,7 +57,7 @@ const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
 // Implement request queue to prevent rate limiting
 class RequestQueue {
-    constructor(concurrency = 10) {
+    constructor(concurrency = 5) {
         this.queue = [];
         this.running = 0;
         this.concurrency = concurrency;
@@ -313,7 +313,8 @@ async function getAllRecentMovies(maxPages, lang) {
 
     try {
         console.log(`Fetching all recent movies for language: ${lang}, max pages: ${maxPages}`);
-        const fetchPage = async (page) => {
+        
+        const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
             const pageKey = `recent_page_${lang}_${page}`;
             
@@ -362,12 +363,17 @@ async function getAllRecentMovies(maxPages, lang) {
                 console.log(`Fetched ${validMovies.length} movies from page: ${page}`);
                 return validMovies;
             } catch (err) {
-                console.error(`Error fetching page ${page}:`, err);
-                return [];
+                if (retries > 0) {
+                    console.warn(`Error fetching page ${page}, retrying... (${3 - retries} attempts left)`);
+                    return fetchPage(page, retries - 1);
+                } else {
+                    console.error(`Error fetching page ${page} after multiple attempts:`, err);
+                    return [];
+                }
             }
         };
 
-        // Fetch all pages in parallel with controlled concurrency
+        // Fetch all pages
         const pagePromises = [];
         for (let i = 1; i <= maxPages; i++) {
             pagePromises.push(fetchPage(i));
