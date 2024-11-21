@@ -177,72 +177,79 @@ async function getEinthusanIdByTitle(title, lang) {
     }
 }
 
-// Function to get all recent movies
 async function getAllRecentMovies(maxPages, lang) {
-    const baseUrl = `https://einthusan.tv/movie/results/?find=Recent&lang=${lang}&page=`;
+    const baseUrl = config.BaseURL;
+    const fetchUrl = `/movie/results/?find=Recent&lang=${lang}&page=`;
     const resultsArray = [];
-    try {
-        for (let page = 1; page <= maxPages; page++) {
-            const url = `${baseUrl}${page}`;
-            const cachedResults = cache.get(url);
-            if (cachedResults) {
-                resultsArray.push(...cachedResults);
-                continue; // Skip fetching if cached
-            }
 
+    const fetchPage = async (page) => {
+        const url = `${baseUrl}${fetchUrl}${page}`;
+        const cachedResults = cache.get(url);
+        if (cachedResults) {
+            // Return cached results directly if they exist
+            return cachedResults;
+        }
+
+        try {
             const res = await client.get(url);
-            if (!res || !res.data) {
-                console.error(`Failed to get catalog results for page ${page}: No data received`);
-                continue; // Continue to the next page instead of breaking
-            }
+            if (!res || !res.data) return [];
 
             const html = parse(res.data);
-            const movieList = html.querySelector("#UIMovieSummary");
-            if (!movieList) continue; // Continue if no movie list found
-
-            const searchResults = movieList.querySelectorAll("li");
-            if (searchResults.length === 0) continue; // Continue if no more results
-
-            for (const item of searchResults) {
+            const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
+            const pageMovies = await Promise.all(searchResults.map(async (item) => {
                 const imgElement = item.querySelector("div.block1 a img");
                 const infoElement = item.querySelector("div.info p");
                 const titleElement = item.querySelector("a.title h3");
                 const idElement = item.querySelector("a.title");
 
-                // Check if elements exist before accessing their properties
-                const img = imgElement ? imgElement.rawAttributes['src'] : null;
-                const year = infoElement ? infoElement.childNodes[0].rawText : null;
-                const title = titleElement ? titleElement.rawText : null;
-                const id = idElement ? idElement.rawAttributes['href'] : null;
+                const img = imgElement?.rawAttributes?.src;
+                const year = infoElement?.childNodes[0]?.rawText;
+                const title = titleElement?.rawText;
+                const id = idElement?.rawAttributes?.href;
 
                 if (img && year && title && id) {
                     const einthusanId = id.split('/')[3];
-                    if (!resultsArray.some(movie => movie.EinthusanID === einthusanId)) {
-                        const imdbId = await getImdbId(title);
-                        resultsArray.push({
-                            id: imdbId,
-                            EinthusanID: einthusanId,
-                            type: "movie",
-                            name: title,
-                            poster: `https:${img}`,
-                            releaseInfo: year,
-                            posterShape: 'poster',
-                        });
-                    }
+                    const imdbId = await getImdbId(title);
+                    return {
+                        id: imdbId,
+                        EinthusanID: einthusanId,
+                        type: "movie",
+                        name: title,
+                        poster: `https:${img}`,
+                        releaseInfo: year,
+                        posterShape: 'poster',
+                    };
                 }
-            }
+                return null;
+            }));
 
-            if (searchResults.length) cache.set(url, resultsArray);
+            // Cache the results for this page with a TTL of 12 hours
+            const filteredMovies = pageMovies.filter(Boolean);
+            cache.set(url, filteredMovies, 43200); // 43200 seconds = 12 hours
+            return filteredMovies;
+        } catch (e) {
+            console.error(`Error fetching page ${page}:`, e);
+            return [];
         }
+    };
 
-        console.log(`Recent ${lang} Movies:`, resultsArray);
-        return resultsArray;
+    const fetchPromises = Array.from({ length: maxPages }, (_, i) => fetchPage(i + 1));
+    const allResults = (await Promise.all(fetchPromises)).flat().filter(Boolean);
 
-    } catch (e) {
-        console.error('An error occurred:', e);
-        return []; // Return an empty array on error
-    }
+    allResults.forEach((movie) => {
+        if (!resultsArray.some((m) => m.EinthusanID === movie.EinthusanID)) {
+            resultsArray.push(movie);
+        }
+    });
+
+    // Cache the final results array with a TTL of 12 hours
+    const cacheKey = `recent_movies_${lang}`;
+    cache.set(cacheKey, resultsArray, 43200); // 43200 seconds = 12 hours
+    console.log(`Cached all results for ${lang}:`, resultsArray);
+
+    return resultsArray;
 }
+
 
 module.exports = {
     search,
