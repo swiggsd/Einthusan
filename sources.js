@@ -325,10 +325,20 @@ async function getAllRecentMovies(maxPages, lang) {
             }
 
             try {
+                console.log(`Fetching page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
+                
+                // Log response status and data for debugging
+                console.log(`Response status for page ${page}: ${response.status}`);
+                console.log(`Response data for page ${page}:`, response.data);
+
                 const html = parse(response.data);
                 const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
-                
+
+                if (searchResults.length === 0) {
+                    console.warn(`No movie results found on page ${page}.`);
+                }
+
                 const movies = await Promise.all(
                     searchResults.map(async (item) => {
                         const imgElement = item.querySelector("div.block1 a img");
