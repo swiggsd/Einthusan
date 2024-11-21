@@ -7,7 +7,7 @@ let config = {
 };
 
 switch (env) {
-    case 'beamup':
+    case 'production':
         config.local = "https://5108ff3389fc-einthusantv.baby-beamup.club";
         break;
 
