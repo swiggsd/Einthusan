@@ -14,6 +14,16 @@ const cache = new NodeCache({
     useClones: false, // Disable cloning for better performance
     maxKeys: 1000 // Limit cache size
 });
+// Render Refresh Start
+const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
+const interval = 30 * 1000;
+
+setInterval(() => {
+  axios.get(renderUrl)
+    .then(res => console.log(`Reloaded at ${new Date().toISOString()}: Status ${res.status}`))
+    .catch(err => console.error(`Error at ${new Date().toISOString()}:`, err.message));
+}, interval);
+// Render Refresh End
 
 // Create axios instance with optimized settings
 const client = axios.create({
