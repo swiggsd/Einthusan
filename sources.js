@@ -57,7 +57,7 @@ const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
 // Implement request queue to prevent rate limiting
 class RequestQueue {
-    constructor(concurrency = 60) {
+    constructor(concurrency = 30) {
         this.queue = [];
         this.running = 0;
         this.concurrency = concurrency;
@@ -225,7 +225,7 @@ async function getcatalogresults(url) {
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
 
         // Process results in batches for better performance
-        const batchSize = 6;
+        const batchSize = 5;
         const resultsArray = [];
         
         for (let i = 0; i < searchResults.length; i += batchSize) {
