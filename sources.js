@@ -290,6 +290,12 @@ async function getcatalogresults(url) {
 
 // Optimized function to get Einthusan ID by title
 async function getEinthusanIdByTitle(title, lang) {
+    // Check if lang is undefined
+    if (typeof lang === 'undefined') {
+        console.error("Error: 'lang' parameter is undefined.");
+        return; // Exit the function early
+    }
+    
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
