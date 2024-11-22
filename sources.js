@@ -153,6 +153,11 @@ const replaceIpInLink = (link) => {
 
 // Optimized stream function
 async function stream(einthusan_id, lang) {
+     // Check if lang is undefined
+     if (typeof lang === 'undefined') {
+        console.error("Error: 'lang' parameter is undefined.");
+        return; // Exit the function early
+    }
     const cacheKey = `stream_${einthusan_id}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
@@ -295,7 +300,7 @@ async function getEinthusanIdByTitle(title, lang) {
         console.error("Error: 'lang' parameter is undefined.");
         return; // Exit the function early
     }
-    
+
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
