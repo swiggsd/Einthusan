@@ -201,6 +201,12 @@ async function stream(einthusan_id, lang) {
 
 // Optimized search function with batch processing
 async function search(lang, slug) {
+    // Check if lang is undefined
+    if (typeof lang === 'undefined') {
+        console.error("Error: 'lang' parameter is undefined.");
+        return; // Exit the function early
+    }
+
     const cacheKey = `search_${slug}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
