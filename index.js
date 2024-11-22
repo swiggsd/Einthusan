@@ -9,6 +9,24 @@ const manifest = require("./manifest");
 require('dotenv').config();
 const app = express();
 const langs = ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"];
+// Function to fetch recent movies for all languages
+const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
+    try {
+        await Promise.all(langs.map(async (lang) => {
+            const movies = await sources.getAllRecentMovies(maxPages, lang);
+            console.log(`Fetched ${movies.length} movies for language: ${lang}`);
+        }));
+    } catch (error) {
+        console.error("Error fetching movies for all languages:", error);
+    }
+};
+
+// Schedule the fetch every 12 hours (43200000 milliseconds)
+setInterval(fetchRecentMoviesForAllLanguages, 43200000);
+
+// Initial fetch when the server starts
+fetchRecentMoviesForAllLanguages();
+
 
 app.set('trust proxy', true);
 // Middleware for Swagger Stats
