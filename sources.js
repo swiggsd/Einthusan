@@ -94,22 +94,46 @@ class RequestQueue {
 const requestQueue = new RequestQueue();
 
 // Optimized IMDb ID fetching
-async function getImdbId(title) {
-    const cacheKey = `imdb_${normalizeTitle(title)}`;
+async function getImdbId(title, year) {
+    // Validate the title
+    if (typeof title !== 'string' || !title.trim()) {
+        console.error('Invalid title provided.');
+        return null;
+    }
+
+    // Convert year to a number if it is provided
+    if (year !== undefined) {
+        year = Number(year); // Convert to number
+
+        // Validate the year
+        if (isNaN(year) || year < 1888 || year > new Date().getFullYear()) {
+            console.error('Invalid year provided. Year must be a number between 1888 and the current year.');
+            return null;
+        }
+    }
+
+    // Create a cache key that includes both title and year
+    const cacheKey = `imdb_${normalizeTitle(title)}_${year || 'any'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache hit for IMDb ID: ${title}`);
+        console.log(`Cache hit for IMDb ID: ${title} ${year ? `(${year})` : ''}`);
         return cached;
     }
 
     try {
-        console.log(`Fetching IMDb ID for title: "${title}"`);
-        const result = await requestQueue.add(() => getImdbIdAsync(title));
+        console.log(`Fetching IMDb ID for title: "${title}"${year ? ` for year: ${year}` : ''}`);
+        
+        // Call the promisified version of nameToImdb
+        const result = await getImdbIdAsync({ name: title, year: year });
+
         if (result) {
-            console.log(`Fetched IMDb ID: ${result} for title: "${title}"`);
-            cache.set(cacheKey, result);
+            console.log(`Fetched IMDb ID: ${result} for title: "${title}"${year ? ` (${year})` : ''}`);
+            cache.set(cacheKey, result);  // Cache the result
+            return result;  // Return the result immediately after caching
         }
-        return result;
+
+        console.warn(`No result found for title: "${title}"${year ? ` (${year})` : ''}`);
+        return null;
     } catch (err) {
         console.error(`Error fetching IMDb ID for "${title}":`, err);
         return null;
@@ -266,7 +290,7 @@ async function getcatalogresults(url) {
 
                 if (!img || !year || !title || !einthusanId) return null;
 
-                const imdbId = await getImdbId(title);
+                const imdbId = await getImdbId(title,year);
                 return {
                     id: imdbId,
                     EinthusanID: einthusanId,
@@ -398,7 +422,7 @@ async function getAllRecentMovies(maxPages, lang) {
 
                         if (!img || !year || !title || !einthusanId) return null;
 
-                        const imdbId = await getImdbId(title);
+                        const imdbId = await getImdbId(title,year);
                         return {
                             id: imdbId,
                             EinthusanID: einthusanId,

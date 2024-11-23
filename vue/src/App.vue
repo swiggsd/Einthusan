@@ -36,9 +36,9 @@
                         <div style="align-items: center; display: flex; justify-content: center;">
                             <div style="margin: auto">
                                 <p>Buymeacoffee.com</p>
-                                <a href="https://www.buymeacoffee.com/asaddon"><img
+                                <a href='https://www.buymeacoffee.com/asaddon' target='_blank'><img
                                         src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=asaddon&button_colour=FF5F5F&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
-                            </div>
+                           </div>
                             <div style="margin: auto">
                                 <p>Ko-fi.com</p>
                                 <a href='https://ko-fi.com/W7W2166YEP' target='_blank'><img height='36'

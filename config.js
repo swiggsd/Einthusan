@@ -8,7 +8,7 @@ let config = {
 
 switch (env) {
     case 'production':
-        config.local = "https://5108ff3389fc-einthusan.baby-beamup.club/";
+        config.local = "https://einthusantv-k9mh.onrender.com/";
         break;
 
     case 'local':
