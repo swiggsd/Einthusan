@@ -62,6 +62,11 @@ client.interceptors.response.use(undefined, async (err) => {
 // Promisify nameToImdb for better async handling
 const getImdbIdAsync = promisify(nameToImdb);
 
+function capitalizeFirstLetter(string) {
+    if (!string) return string; // Handle empty string case
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
 // Optimized title normalization
 const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
@@ -210,11 +215,11 @@ async function stream(einthusan_id, lang) {
         const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
         
         if (!mp4Link) throw new Error("No video source found");
-
+        const capitalizedLang = capitalizeFirstLetter(lang);
         const result = {
             streams: [{
                 url: mp4Link,
-                name: 'EinthusanTV',
+                name: `EinthusanTV - ${capitalizedLang}`,
                 title: `${title} (${year})`
             }]
         };
