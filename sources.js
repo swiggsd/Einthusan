@@ -194,7 +194,7 @@ async function stream(einthusan_id, lang) {
             console.log(`Fetching Einthusan ID by title for: ${einthusan_id}`);
             const title = await ttnumberToTitle(einthusan_id);
             if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
-            einthusan_id = await getEinthusanIdByTitle(title, lang);
+            einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
         }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
@@ -318,7 +318,7 @@ async function getcatalogresults(url) {
 }
 
 // Optimized function to get Einthusan ID by title
-async function getEinthusanIdByTitle(title, lang) {
+async function getEinthusanIdByTitle(title, lang, ttnumber) {
     // Check if lang is undefined
     if (typeof lang === 'undefined') {
         console.error("Error: 'lang' parameter is undefined.");
@@ -336,7 +336,23 @@ async function getEinthusanIdByTitle(title, lang) {
         console.log(`Fetching Einthusan ID for title: ${title}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
         const results = await getcatalogresults(url);
-        
+
+        // Check if results is an array
+        if (!Array.isArray(results)) {
+            throw new Error("Invalid results structure received from getcatalogresults.");
+        }
+
+        // If ttnumber is provided, search for it in the results
+        if (ttnumber) {
+            const matchByTTNumber = results.find(movie => movie.id === ttnumber);
+            if (matchByTTNumber) {
+                console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for tt number: ${ttnumber}`);
+                return matchByTTNumber.EinthusanID;
+            }
+            throw new Error(`No match found for tt number: ${ttnumber}`);
+        }
+
+        // If no ttnumber is provided, proceed with the title search
         const normalizedSearchTitle = normalizeTitle(title);
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
         
@@ -354,8 +370,6 @@ async function getEinthusanIdByTitle(title, lang) {
 }
 
 // Optimized function to get all recent movies with parallel processing
-
-
 async function getAllRecentMovies(maxPages, lang) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
@@ -366,7 +380,6 @@ async function getAllRecentMovies(maxPages, lang) {
 
     try {
         console.log(`Fetching all recent movies for language: ${lang}, max pages: ${maxPages}`);
-        
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
             const pageKey = `recent_page_${lang}_${page}`;
