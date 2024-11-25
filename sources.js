@@ -196,12 +196,14 @@ async function stream(einthusan_id, lang) {
 
     try {
         if (einthusan_id.startsWith("tt")) {
-            console.log(`Fetching Einthusan ID by title for: ${einthusan_id}`);
-            const title = await ttnumberToTitle(einthusan_id);
-            if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
-            einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
-        }
-
+        console.log(`Fetching Einthusan ID by title for: ${einthusan_id}`);
+        const title = await ttnumberToTitle(einthusan_id);
+        if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
+        einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
+        // Check if einthusan_id is undefined after the function call
+        if (typeof einthusan_id === 'undefined') {
+        throw new Error(`Einthusan ID could not be retrieved for title: ${title}`);}}
+            
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         console.log(`Fetching stream from URL: ${url}`);
         const response = await requestQueue.add(() => client.get(url));
@@ -228,8 +230,7 @@ async function stream(einthusan_id, lang) {
         cache.set(cacheKey, result, 3600); // Cache for 1 hour
         return result;
     } catch (err) {
-        console.error("Error in stream function:", err);
-        throw err;
+        console.error("Error in Stream Function:", err.message);
     }
 }
 
@@ -255,8 +256,7 @@ async function search(lang, slug) {
         cache.set(cacheKey, results);
         return results;
     } catch (err) {
-        console.error("Error in search function:", err);
-        throw err;
+        console.error("Error in Search Function:", err.message);
     }
 }
 
@@ -317,8 +317,7 @@ async function getcatalogresults(url) {
         }
         return resultsArray;
     } catch (err) {
-        console.error("Error in getcatalogresults:", err);
-        throw err;
+        console.error("Error in GetCatalogResults Function:", err.message);
     }
 }
 
@@ -354,6 +353,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
                 console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for tt number: ${ttnumber}`);
                 return matchByTTNumber.EinthusanID;
             }
+            // Move the error throw outside of the if statement
             throw new Error(`No match found for tt number: ${ttnumber}`);
         }
 
@@ -369,8 +369,8 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         
         throw new Error(`No match found for title: ${title}`);
     } catch (err) {
-        console.error("Error in getEinthusanIdByTitle:", err);
-        throw err;
+        // Log only the concise error message
+        console.error("Error in GetEinthusanIdByTitle Function:", err.message); // Only log the error message
     }
 }
 
@@ -462,7 +462,7 @@ async function getAllRecentMovies(maxPages, lang) {
                     console.warn(`Error fetching page ${page}, retrying... (${3 - retries} attempts left)`);
                     return fetchPage(page, retries - 1);
                 } else {
-                    console.error(`Error fetching page ${page} after multiple attempts:`, err);
+                    console.error(`Error fetching page ${page} after multiple attempts in getAllRecentMovies:`, err.message);
                     return [];
                 }
             } finally {
@@ -491,8 +491,7 @@ async function getAllRecentMovies(maxPages, lang) {
         cache.set(cacheKey, results, 43200); // Cache final results for 12 hours
         return results;
     } catch (err) {
-        console.error("Error in getAllRecentMovies:", err);
-        throw err;
+        console.error("Error in getAllRecentMovies:", err.message);
     }
 }
 

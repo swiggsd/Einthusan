@@ -25,7 +25,7 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
 setInterval(fetchRecentMoviesForAllLanguages, 43200000);
 
 // Initial fetch when the server starts
-fetchRecentMoviesForAllLanguages();
+//fetchRecentMoviesForAllLanguages();
 
 
 app.set('trust proxy', true);
@@ -122,7 +122,7 @@ const setCommonHeaders = (res) => {
 };
 
 // Handle catalog requests
-app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
+app.get('/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     setCommonHeaders(res);
     try {
         const { id, extra, configuration } = req.params;
@@ -154,7 +154,7 @@ app.get('/:configuration?/catalog/movie/:id/:extra?.json', async (req, res) => {
 });
 
 // Handle movie stream requests
-app.get('/:configuration?/stream/movie/:id/:extra?.json', async (req, res) => {
+app.get('/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     setCommonHeaders(res);
     try {
         const { id, configuration } = req.params;
