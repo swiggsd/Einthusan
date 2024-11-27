@@ -7,24 +7,31 @@ const nameToImdb = require("name-to-imdb");
 const NodeCache = require("node-cache");
 const { promisify } = require('util');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const zlib = require('zlib'); // Import zlib for compression
 // Enhanced caching configuration
 const cache = new NodeCache({
     stdTTL: 30 * 60, // 30 minutes default TTL
     checkperiod: 60 * 60,
     useClones: false, // Disable cloning for better performance
-    maxKeys: 6000 // Limit cache size
+    maxKeys: 10000 // Limit cache size
 });
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
 const interval = 30 * 1000;
-
 setInterval(() => {
   axios.get(renderUrl)
     .then(res => console.log(`Reloaded at ${new Date().toISOString()}: Status ${res.status}`))
     .catch(err => console.error(`Error at ${new Date().toISOString()}:`, err.message));
 }, interval);
 // Render Refresh End
+// Compression and Decompression Functions
+const compressData = (data) => {
+    return zlib.deflateSync(JSON.stringify(data)).toString('base64');
+};
 
+const decompressData = (data) => {
+    return JSON.parse(zlib.inflateSync(Buffer.from(data, 'base64')).toString());
+};
 // Create axios instance with optimized settings
 const client = axios.create({
     baseURL: config.BaseURL,
@@ -132,7 +139,7 @@ async function getImdbId(title, year) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for IMDb ID: ${title} ${year ? `(${year})` : ''}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -143,7 +150,7 @@ async function getImdbId(title, year) {
 
         if (result) {
             console.log(`Fetched IMDb ID: ${result} for title: "${title}"${year ? ` (${year})` : ''}`);
-            cache.set(cacheKey, result);  // Cache the result
+            cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
 
@@ -161,7 +168,7 @@ async function ttnumberToTitle(ttNumber) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for title of ttNumber: ${ttNumber}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -175,7 +182,7 @@ async function ttnumberToTitle(ttNumber) {
         const title = movie ? movie.l : null;
         if (title) {
             console.log(`Fetched title: "${title}" for IMDb ID: ${ttNumber}`);
-            cache.set(cacheKey, title);
+            cache.set(cacheKey, compressData(title));
         }
         return title;
     } catch (err) {
@@ -203,7 +210,7 @@ async function stream(einthusan_id, lang) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for stream: ${einthusan_id}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -239,7 +246,7 @@ async function stream(einthusan_id, lang) {
         };
 
         console.log(`Stream fetched successfully for: ${title} (${year})`);
-        cache.set(cacheKey, result, 3600); // Cache for 1 hour
+        cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
         console.error("Error in Stream Function:", err.message);
@@ -258,14 +265,14 @@ async function search(lang, slug) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for search results: ${slug}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
         console.log(`Searching for: ${slug} in language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
-        cache.set(cacheKey, results);
+        cache.set(cacheKey, compressData(results)); // Cache compressed results
         return results;
     } catch (err) {
         console.error("Error in Search Function:", err.message);
@@ -277,7 +284,7 @@ async function getcatalogresults(url) {
     const cached = cache.get(url);
     if (cached) {
         console.log(`Cache hit for catalog results: ${url}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -325,7 +332,7 @@ async function getcatalogresults(url) {
 
         if (resultsArray.length) {
             console.log(`Fetched ${resultsArray.length} catalog results from URL: ${url}`);
-            cache.set(url, resultsArray);
+            cache.set(url, compressData(resultsArray)); // Cache compressed results
         }
         return resultsArray;
     } catch (err) {
@@ -345,7 +352,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for Einthusan ID by title: ${title}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -363,6 +370,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
             const matchByTTNumber = results.find(movie => movie.id === ttnumber);
             if (matchByTTNumber) {
                 console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for tt number: ${ttnumber}`);
+                cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID)); // Cache compressed ID
                 return matchByTTNumber.EinthusanID;
             }
             // Move the error throw outside of the if statement
@@ -375,7 +383,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         
         if (match) {
             console.log(`Found Einthusan ID: ${match.EinthusanID} for title: ${title}`);
-            cache.set(cacheKey, match.EinthusanID);
+            cache.set(cacheKey, compressData(match.EinthusanID)); // Cache compressed ID
             return match.EinthusanID;
         }
         
@@ -392,7 +400,7 @@ async function getAllRecentMovies(maxPages, lang) {
     const cached = cache.get(cacheKey);
     if (cached) {
         console.log(`Cache hit for recent movies: ${lang}, max pages: ${maxPages}`);
-        return cached;
+        return decompressData(cached);
     }
 
     try {
@@ -404,7 +412,7 @@ async function getAllRecentMovies(maxPages, lang) {
             const cachedPage = cache.get(pageKey);
             if (cachedPage) {
                 console.log(`Cache hit for recent movies page: ${page}`);
-                return cachedPage;
+                return decompressData(cachedPage);
             }
 
             try {
@@ -466,7 +474,7 @@ async function getAllRecentMovies(maxPages, lang) {
                 );
 
                 const validMovies = movies.filter(Boolean);
-                cache.set(pageKey, validMovies, 43200); // Cache page results for 12 hours
+                cache.set(pageKey, compressData(validMovies), 43200); // Cache page results for 12 hours with compression
                 console.log(`Fetched ${validMovies.length} movies from page: ${page}`);
                 return validMovies;
             } catch (err) {
@@ -500,7 +508,7 @@ async function getAllRecentMovies(maxPages, lang) {
 
         const results = Array.from(uniqueMovies.values());
         console.log(`Fetched a total of ${results.length} unique recent movies.`);
-        cache.set(cacheKey, results, 43200); // Cache final results for 12 hours
+        cache.set(cacheKey, compressData(results), 43200); // Cache final results for 12 hours with compression
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
