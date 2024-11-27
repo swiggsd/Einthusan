@@ -12,7 +12,7 @@ const cache = new NodeCache({
     stdTTL: 30 * 60, // 30 minutes default TTL
     checkperiod: 60 * 60,
     useClones: false, // Disable cloning for better performance
-    maxKeys: 1000 // Limit cache size
+    maxKeys: 6000 // Limit cache size
 });
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
