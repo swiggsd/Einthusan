@@ -25,7 +25,7 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
 setInterval(fetchRecentMoviesForAllLanguages, 43200000);
 
 // Initial fetch when the server starts
-//fetchRecentMoviesForAllLanguages();
+fetchRecentMoviesForAllLanguages();
 
 
 app.set('trust proxy', true);
@@ -93,6 +93,7 @@ app.get('/:configuration?/manifest.json', (req, res) => {
 
     if (langs.includes(configuration)) {
         manifest.behaviorHints.configurationRequired = false;
+        manifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
         manifest.catalogs = [
             {
                 // Catalog with search (requires search to show)
@@ -160,7 +161,7 @@ app.get('/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
         const { id, configuration } = req.params;
         let streams;
 
-        if (id.startsWith("einthusan_id:") || id.startsWith("tt")) {
+        if (id.startsWith("tt")) {
             streams = await sources.stream(id, configuration);
         }
 

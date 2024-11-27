@@ -62,6 +62,16 @@ client.interceptors.response.use(undefined, async (err) => {
 // Promisify nameToImdb for better async handling
 const getImdbIdAsync = promisify(nameToImdb);
 
+// Function to decode HTML entities
+const decodeHtmlEntities = (str) => str.replace(/&(?:#(\d+);|([a-zA-Z0-9]+);)/g, (match, num, name) => {
+    if (num) {
+        return String.fromCharCode(num); // Numeric entities (e.g., &#39;)
+    }
+    const entityMap = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', copy: '©', reg: '®' };
+    return entityMap[name] || match; // Named entities (e.g., &amp;)
+});
+
+
 function capitalizeFirstLetter(string) {
     if (!string) return string; // Handle empty string case
     return string.charAt(0).toUpperCase() + string.slice(1);
@@ -140,7 +150,7 @@ async function getImdbId(title, year) {
         console.warn(`No result found for title: "${title}"${year ? ` (${year})` : ''}`);
         return null;
     } catch (err) {
-        console.error(`Error fetching IMDb ID for "${title}":`, err);
+        console.error(`Error fetching IMDb ID for "${title}":`, err.message);
         return null;
     }
 }
@@ -169,15 +179,17 @@ async function ttnumberToTitle(ttNumber) {
         }
         return title;
     } catch (err) {
-        console.error("Error fetching title for IMDb ID:", ttNumber, err);
+        console.error("Error fetching title for IMDb ID:", ttNumber, err.message);
         return null;
     }
 }
 
 // Optimized IP replacement
 const replaceIpInLink = (link) => {
-    console.log(`Replacing IP in link: ${link}`);
-    return link.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/, 'cdn1.einthusan.io');
+    console.log(`Original link: ${link}`);
+    const updatedLink = link.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/, 'cdn1.einthusan.io');
+    console.log(`Updated link: ${updatedLink}`);
+    return updatedLink;
 };
 
 // Optimized stream function
@@ -290,7 +302,7 @@ async function getcatalogresults(url) {
 
                 const img = imgElement.rawAttributes?.src;
                 const year = infoElement.childNodes[0]?.rawText.trim();
-                const title = titleElement.rawText.trim();
+                const title = decodeHtmlEntities(titleElement.rawText.trim());
                 const einthusanId = idElement.rawAttributes?.href.split('/')[3];
 
                 if (!img || !year || !title || !einthusanId) return null;
@@ -435,7 +447,7 @@ async function getAllRecentMovies(maxPages, lang) {
 
                         const img = imgElement.rawAttributes?.src;
                         const year = infoElement.childNodes[0]?.rawText.trim();
-                        const title = titleElement.rawText.trim();
+                        const title = decodeHtmlEntities(titleElement.rawText.trim());
                         const einthusanId = idElement.rawAttributes?.href.split('/')[3];
 
                         if (!img || !year || !title || !einthusanId) return null;

@@ -74,9 +74,7 @@
                         <div class="items-center header">
                             <img class="logo" :src="manifest.logo">
                             <h1 class="font-semibold text-lg mr-auto">{{ manifest.name }}</h1>
-                            <h2 class="font-semibold text-lg mr-auto" style="text-align: right;">Version: {{
-        manifest.version
-}}</h2>
+                            <h2 class="font-semibold text-lg mr-auto" style="text-align: right;">Version: {{ manifest.version }}</h2>
                             <p class="mt-5">{{ manifest.description }}</p>
                         </div>
 
@@ -85,7 +83,7 @@
                         </div>
 
                         <div class="items-center mt-5 description">
-                            <h2 class="font-semibold text-lg mr-auto">This addon has more:</h2>
+                            <h2 class="font-semibold text-lg mr-auto">Extra Features:</h2>
                             <ul>
                                 <li>Recent Movies Catalog Show</li>
                             </ul>
@@ -104,7 +102,7 @@
                                 <select v-model="state.Language" @change="methods.selectLang()" id="Input"
                                     class="block p-4 pl-10 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500">
                                     <option disabled value="">Select Languages</option>
-                                    <option v-for="language in state.languages" :value="language">{{ language }}
+                                    <option v-for="language in state.languages" :value="language">{{ language.charAt(0).toUpperCase() + language.slice(1) }}
                                     </option>
                                 </select>
                             </div>
@@ -115,9 +113,9 @@
                         </div>
 
                         <div class="items-center mt-5 description">
-                            <h2 class="font-semibold text-lg mr-auto">Selected language:</h2>
+                            <h2 class="font-semibold text-lg mr-auto">Selected Language:</h2>
                             <br>
-                            <h3>{{ state.Language ? state.Language : 'None' }}</h3>
+                            <h3>{{ state.Language ? state.Language.charAt(0).toUpperCase() + state.Language.slice(1) : 'None' }}</h3>
                         </div>
 
                         <div class="flex items-center justify-center space-x-2 mt-10">
@@ -135,12 +133,13 @@
                         </div>
 
                         <div class="flex flex-col mt-5" style="align-items: center;">
-                            <p class="text-center">This addon was recreated by:
-                                <a href="https://github.com/asaddon" target="_blank" class="text-purple-700"><b
-                                        style="font-weight: 600;">asaddon</b></a><br />
+                        <p class="text-center">This addon was recreated by:
+                        <a href="https://github.com/asaddon" target="_blank" class="text-purple-700"><b style="font-weight: 600;">asaddon</b></a><br /></p>
+                        <p class="text-center">Orignally By:
+                        <a href="https://github.com/dexter21767/" target="_blank" class="text-purple-700"><b style="font-weight: 600;">dexter21767</b></a><br />   
                                 UI by:
                                 <a href="https://github.com/rleroi" target="_blank" class="text-purple-700"><b
-                                        style="font-weight: 600;">rab1t</b></a><br />
+                                style="font-weight: 600;">rab1t</b></a><br />
                                 Background by:
                                 <b class="text-purple-700" style="font-weight: 600;">Ahlen Ken A. Batalon</b>.
                             </p>
@@ -169,6 +168,7 @@ useHead({
     ],
 })
 
+
 const state = reactive({
     languages: ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"],
     install: null,
@@ -187,7 +187,6 @@ const methods = {
         const configuration = state.Language ? '/' + state.Language : '';
         const location = window.location.host + configuration + '/manifest.json'
         document.getElementById("install_button").href = 'stremio://' + location;
-        //console.log('location', location);
     }
 }
 
