@@ -86,7 +86,7 @@ function capitalizeFirstLetter(string) {
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
 // Serve configuration-specific manifest.json
-app.get('/:configuration?/manifest.json', (req, res) => {
+app.get('/:configuration/manifest.json', (req, res) => {
     const { configuration } = req.params;
     res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
     res.setHeader('Content-Type', 'application/json');
