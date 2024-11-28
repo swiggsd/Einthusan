@@ -261,19 +261,11 @@ async function search(lang, slug) {
         return; // Exit the function early
     }
 
-    const cacheKey = `search_${slug}_${lang}`;
-    const cached = cache.get(cacheKey);
-    if (cached) {
-        console.log(`Cache hit for search results: ${slug}`);
-        return decompressData(cached);
-    }
-
     try {
         console.log(`Searching for: ${slug} in language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
-        cache.set(cacheKey, compressData(results)); // Cache compressed results
-        return results;
+        return results; // Return the search results directly without caching
     } catch (err) {
         console.error("Error in Search Function:", err.message);
     }
@@ -281,12 +273,6 @@ async function search(lang, slug) {
 
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
-    const cached = cache.get(url);
-    if (cached) {
-        console.log(`Cache hit for catalog results: ${url}`);
-        return decompressData(cached);
-    }
-
     try {
         console.log(`Fetching catalog results from URL: ${url}`);
         const response = await requestQueue.add(() => client.get(url));
@@ -314,7 +300,7 @@ async function getcatalogresults(url) {
 
                 if (!img || !year || !title || !einthusanId) return null;
 
-                const imdbId = await getImdbId(title,year);
+                const imdbId = await getImdbId(title, year);
                 return {
                     id: imdbId,
                     EinthusanID: einthusanId,
@@ -332,7 +318,6 @@ async function getcatalogresults(url) {
 
         if (resultsArray.length) {
             console.log(`Fetched ${resultsArray.length} catalog results from URL: ${url}`);
-            cache.set(url, compressData(resultsArray)); // Cache compressed results
         }
         return resultsArray;
     } catch (err) {
@@ -405,22 +390,13 @@ async function getAllRecentMovies(maxPages, lang) {
 
     try {
         console.log(`Fetching all recent movies for language: ${lang}, max pages: ${maxPages}`);
+        
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
-            const pageKey = `recent_page_${lang}_${page}`;
-            
-            const cachedPage = cache.get(pageKey);
-            if (cachedPage) {
-                console.log(`Cache hit for recent movies page: ${page}`);
-                return decompressData(cachedPage);
-            }
 
             try {
                 console.log(`Fetching page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
-
-                // Log response status for debugging
-                console.log(`Response status for page ${page}: ${response.status}`);
                 
                 if (response.status === 200) {
                     const body = response.data; // Adjust based on your response format
@@ -460,7 +436,7 @@ async function getAllRecentMovies(maxPages, lang) {
 
                         if (!img || !year || !title || !einthusanId) return null;
 
-                        const imdbId = await getImdbId(title,year);
+                        const imdbId = await getImdbId(title, year);
                         return {
                             id: imdbId,
                             EinthusanID: einthusanId,
@@ -474,7 +450,6 @@ async function getAllRecentMovies(maxPages, lang) {
                 );
 
                 const validMovies = movies.filter(Boolean);
-                cache.set(pageKey, compressData(validMovies), 43200); // Cache page results for 12 hours with compression
                 console.log(`Fetched ${validMovies.length} movies from page: ${page}`);
                 return validMovies;
             } catch (err) {
@@ -508,7 +483,9 @@ async function getAllRecentMovies(maxPages, lang) {
 
         const results = Array.from(uniqueMovies.values());
         console.log(`Fetched a total of ${results.length} unique recent movies.`);
-        cache.set(cacheKey, compressData(results), 43200); // Cache final results for 12 hours with compression
+
+        // Cache final results for 12 hours with compression
+        cache.set(cacheKey, compressData(results), 43200);
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
