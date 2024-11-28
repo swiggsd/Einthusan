@@ -164,29 +164,57 @@ async function getImdbId(title, year) {
 
 // Optimized title fetching from IMDb
 async function ttnumberToTitle(ttNumber) {
+    // Step 1: Generate a cache key for the IMDb ID
     const cacheKey = `title_${ttNumber}`;
     const cached = cache.get(cacheKey);
+    
+    // Check if the title is already cached
     if (cached) {
-        console.log(`Cache hit for title of ttNumber: ${ttNumber}`);
-        return decompressData(cached);
+        console.log(`Cache hit for title of IMDb ID: ${ttNumber}`);
+        return decompressData(cached); // Return cached title
     }
 
     try {
-        console.log(`Fetching title for IMDb ID: ${ttNumber}`);
-        const response = await requestQueue.add(() => 
-            axios.get(`https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`, {
-                timeout: 5000
-            })
-        );
-        const movie = response.data.d.find(item => item.id === ttNumber);
+        // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
+        console.log(`Fetching movie details for IMDb ID: ${ttNumber} from OMDB API`);
+
+        const omdbApiKey = process.env.OMDB_API_KEY; // Access the API key from environment variables
+        if (!omdbApiKey) {
+            console.error("OMDB API key is missing in environment variables.");
+            return null; // If API key is not found, return null
+        }
+        const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
+        const response = await axios.get(omdbUrl, { timeout: 5000 });
+
+        // Step 3: Check if the Country is "India"
+        const movieData = response.data;
+        const countryOfOrigin = movieData.Country; // The country of origin is in the 'Country' field
+        
+        if (!countryOfOrigin || !countryOfOrigin.includes('India')) {
+            console.log(`Movie ${ttNumber} is not from India. Skipping.`);
+            return null; // If the country is not India, return null or handle it as needed
+        }
+
+        // Step 4: Country is India, proceed to fetch the movie title from the IMDb suggestions API
+        console.log(`Movie ${ttNumber} is from India. Fetching title from IMDb suggestions API.`);
+        
+        const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+        
+        // Extract the title from the response
+        const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
         const title = movie ? movie.l : null;
+
         if (title) {
             console.log(`Fetched title: "${title}" for IMDb ID: ${ttNumber}`);
+            // Step 5: Cache the title
             cache.set(cacheKey, compressData(title));
         }
-        return title;
+
+        return title; // Return the fetched title or null if not found
     } catch (err) {
-        console.error("Error fetching title for IMDb ID:", ttNumber, err.message);
+        // Step 6: Error handling
+        console.error(`Error fetching movie data for IMDb ID: ${ttNumber}`, err.message);
         return null;
     }
 }

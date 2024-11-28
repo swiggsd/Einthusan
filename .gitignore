@@ -6,3 +6,4 @@
 /beamup.json
 /package-lock.json
 .gitattributes
+.env
