@@ -85,16 +85,16 @@ function capitalizeFirstLetter(string) {
     if (!string) return ''; // Handle empty strings
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
-// Serve configuration-specific manifest.json
 app.get('/:configuration/manifest.json', (req, res) => {
     const { configuration } = req.params;
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
+    setCommonHeaders(res);
 
-    if (langs.includes(configuration)) {
+        if (langs.includes(configuration)) {
         manifest.behaviorHints.configurationRequired = false;
-        manifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
-        manifest.catalogs = [
+        // Create a copy of the original manifest to modify
+        const localizedManifest = { ...manifest };
+        localizedManifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
+        localizedManifest.catalogs = [
             {
                 // Catalog with search (requires search to show)
                 type: "movie",
@@ -110,9 +110,8 @@ app.get('/:configuration/manifest.json', (req, res) => {
                 extra: [] // No search parameter required
             }
         ];
-        return res.json(manifest);
+        return res.json(localizedManifest);
     }
-    
     return res.status(400).send({ error: "Invalid configuration" });
 });
 
