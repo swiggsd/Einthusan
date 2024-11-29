@@ -17,11 +17,14 @@ const cache = new NodeCache({
 });
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
-const interval = 30 * 1000;
+const interval = 10 * 60 * 1000; // 10 minutes in milliseconds
+const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Karachi', timeZoneName: 'long' };
+
 setInterval(() => {
+  const date = new Date();
   axios.get(renderUrl)
-    .then(res => console.log(`Reloaded at ${new Date().toISOString()}: Status ${res.status}`))
-    .catch(err => console.error(`Error at ${new Date().toISOString()}:`, err.message));
+    .then(res => console.log(`Reloaded at ${date.toLocaleString('en-US', options)}: Status ${res.status}`))
+    .catch(err => console.error(`Error at ${date.toLocaleString('en-US', options)}: (${err.message})`));
 }, interval);
 // Render Refresh End
 // Compression and Decompression Functions
@@ -143,18 +146,17 @@ async function getImdbId(title, year) {
     }
 
     try {
-        console.log(`Fetching IMDb ID for title: "${title}"${year ? ` for year: ${year}` : ''}`);
         
         // Call the promisified version of nameToImdb
         const result = await getImdbIdAsync({ name: title, year: year });
 
         if (result) {
-            console.log(`Fetched IMDb ID: ${result} for title: "${title}"${year ? ` (${year})` : ''}`);
+            console.log(`Fetched IMDb ID: ${result} for Title: "${title}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
 
-        console.warn(`No result found for title: "${title}"${year ? ` (${year})` : ''}`);
+        console.warn(`No result found for Title: "${title}"${year ? ` (${year})` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error fetching IMDb ID for "${title}":`, err.message);
@@ -170,14 +172,15 @@ async function ttnumberToTitle(ttNumber) {
     
     // Check if the title is already cached
     if (cached) {
-        console.log(`Cache hit for title of IMDb ID: ${ttNumber}`);
-        return decompressData(cached); // Return cached title
+        const title = decompressData(cached); // Decompress the cached title
+        console.log(`Cache hit for title "${title}" of IMDb ID: ${ttNumber}`);
+        return title; // Return cached title
     }
+
+    let title = null; // Initialize title variable
 
     try {
         // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
-        console.log(`Fetching movie details for IMDb ID: ${ttNumber} from OMDB API`);
-
         const omdbApiKey = process.env.OMDB_API_KEY; // Access the API key from environment variables
         if (!omdbApiKey) {
             console.error("OMDB API key is missing in environment variables.");
@@ -210,6 +213,8 @@ async function ttnumberToTitle(ttNumber) {
         console.error(`Error fetching movie data for IMDb ID: ${ttNumber}`, err.message);
         return null;
     }
+
+    return title; // Return the fetched title or null if not found
 }
 
 // Optimized IP replacement
@@ -236,13 +241,12 @@ async function stream(einthusan_id, lang) {
 
     try {
         if (einthusan_id.startsWith("tt")) {
-        console.log(`Fetching Einthusan ID by title for: ${einthusan_id}`);
         const title = await ttnumberToTitle(einthusan_id);
-        if (!title) throw new Error(`Unable to retrieve title for ttNumber: ${einthusan_id}`);
+        if (!title) return;
         einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
         // Check if einthusan_id is undefined after the function call
         if (typeof einthusan_id === 'undefined') {
-        throw new Error(`Einthusan ID could not be retrieved for title: ${title}`);}}
+        throw new Error(`Einthusan ID could not be retrieved for Title: ${title}`);}}
             
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         console.log(`Fetching stream from URL: ${url}`);
@@ -295,7 +299,6 @@ async function search(lang, slug) {
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
     try {
-        console.log(`Fetching catalog results from URL: ${url}`);
         const response = await requestQueue.add(() => client.get(url));
         const html = parse(response.data);
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
@@ -338,7 +341,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-            console.log(`Fetched ${resultsArray.length} catalog results from URL: ${url}`);
+           console.log(`Fetched ${Array.isArray(resultsArray) ? resultsArray.length : 0} Catalog Results from URL: ${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`);
         }
         return resultsArray;
     } catch (err) {
@@ -362,7 +365,6 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
     }
 
     try {
-        console.log(`Fetching Einthusan ID for title: ${title}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
         const results = await getcatalogresults(url);
 
@@ -375,12 +377,12 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         if (ttnumber) {
             const matchByTTNumber = results.find(movie => movie.id === ttnumber);
             if (matchByTTNumber) {
-                console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for tt number: ${ttnumber}`);
+                console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for Movie: ${title} (${ttnumber})`);
                 cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID)); // Cache compressed ID
                 return matchByTTNumber.EinthusanID;
             }
             // Move the error throw outside of the if statement
-            throw new Error(`No match found for tt number: ${ttnumber}`);
+            throw new Error(`No match found for for Movie: ${title} (${ttnumber})`);
         }
 
         // If no ttnumber is provided, proceed with the title search
@@ -388,12 +390,12 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
         
         if (match) {
-            console.log(`Found Einthusan ID: ${match.EinthusanID} for title: ${title}`);
+            console.log(`Found Einthusan ID: ${match.EinthusanID} for Title: ${title}`);
             cache.set(cacheKey, compressData(match.EinthusanID)); // Cache compressed ID
             return match.EinthusanID;
         }
         
-        throw new Error(`No match found for title: ${title}`);
+        throw new Error(`No match found for Title: ${title}`);
     } catch (err) {
         // Log only the concise error message
         console.error("Error in GetEinthusanIdByTitle Function:", err.message); // Only log the error message
