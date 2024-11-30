@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install production dependencies
+RUN npm install --omit=dev
 
 # Copy all source code to the working directory
 COPY . .
@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 3000
 
 # Command to run the Node.js application
-CMD ["node", "server.js"]
+ENTRYPOINT ["node", "server.js"]
