@@ -15,6 +15,18 @@ const cache = new NodeCache({
     useClones: false, // Disable cloning for better performance
     maxKeys: 10000 // Limit cache size
 });
+
+// Function to fetch recent movies for all languages
+const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
+    try {
+        await Promise.all(config.langs.map(async (lang) => {
+            const movies = await getAllRecentMovies(maxPages, lang);
+            console.log(`Fetched ${movies.length} movies for language: ${lang}`);
+        }));
+    } catch (error) {
+        console.error("Error fetching movies for all languages:", error);
+    }
+};
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
 const interval = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -225,7 +237,7 @@ async function ttnumberToTitle(ttNumber) {
         }
 
         // Step 4: Country is India, return the title from OMDB
-        console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from India.`);
+        console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from India. Continuing.`);
         
         // Step 5: Cache the title
         cache.set(cacheKey, compressData(movieTitle));
@@ -568,5 +580,6 @@ process.on('unhandledRejection', (err) => {
 module.exports = {
     search,
     stream,
-    getAllRecentMovies
+    getAllRecentMovies,
+    fetchRecentMoviesForAllLanguages
 };

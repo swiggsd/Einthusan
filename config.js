@@ -1,22 +1,7 @@
-const env = process.env.NODE_ENV || 'local';
-
-let config = {
+const config = {
     BaseURL: "https://einthusan.tv",
-    port: env === 'local' ? 3000 : process.env.PORT, // Use dynamic port for Dokku
-    local: ''
+    port: process.env.PORT || 3000, // Default to 3000 if process.env.PORT is not set
+    langs: ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"] // Array of languages
 };
-
-switch (env) {
-    case 'production':
-        config.local = "https://einthusantv-k9mh.onrender.com/";
-        break;
-
-    case 'local':
-        config.local = `http://127.0.0.1:${config.port}`; // Use local port for development
-        break;
-
-    default:
-        throw new Error(`Unknown environment: ${env}`); // Catch unexpected environments
-}
 
 module.exports = config;
