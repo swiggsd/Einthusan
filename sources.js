@@ -141,7 +141,7 @@ async function getImdbId(title, year) {
     const cacheKey = `imdb_${normalizeTitle(title)}_${year || 'any'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache hit for IMDb ID: ${title} ${year ? `(${year})` : ''}`);
+        //console.log(`Cache hit for IMDb ID: ${title} ${year ? `(${year})` : ''}`);
         return decompressData(cached);
     }
 
@@ -151,7 +151,7 @@ async function getImdbId(title, year) {
         const result = await getImdbIdAsync({ name: title, year: year });
 
         if (result) {
-            console.log(`Fetched IMDb ID: ${result} for Title: "${title}"${year ? ` (${year})` : ''}`);
+            //console.log(`Fetched IMDb ID: ${result} for Title: "${title}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
@@ -166,15 +166,32 @@ async function getImdbId(title, year) {
 
 // Optimized title fetching from IMDb
 async function ttnumberToTitle(ttNumber) {
-    // Step 1: Generate a cache key for the IMDb ID
+    // Step 1: Generate cache keys for the IMDb ID and country check
     const cacheKey = `title_${ttNumber}`;
-    const cached = cache.get(cacheKey);
+    const countryCacheKey = `country_${ttNumber}`;
     
     // Check if the title is already cached
-    if (cached) {
-        const title = decompressData(cached); // Decompress the cached title
+    const cachedTitle = cache.get(cacheKey);
+    const cachedCountry = cache.get(countryCacheKey);
+    
+    if (cachedTitle) {
+        const title = decompressData(cachedTitle); // Decompress the cached title
         console.log(`Cache hit for title "${title}" of IMDb ID: ${ttNumber}`);
         return title; // Return cached title
+    }
+
+    // If the country check is cached, use it
+    if (cachedCountry) {
+        
+        const { isIndian, title } = decompressData(cachedCountry);
+        //console.log(`Cache hit for country check of IMDb ID: ${ttNumber} Title: ${title}`);
+        if (isIndian) {
+            console.log(`Returning cached title for Indian movie: "${title}"`);
+            return title;
+        } else {
+            console.log(`Cached Result: Movie: ${title} (IMDb ID: ${ttNumber}) is not from India. Skipping.`);
+            return null; // If the country is not India, return null
+        }
     }
 
     let title = null; // Initialize title variable
@@ -195,33 +212,61 @@ async function ttnumberToTitle(ttNumber) {
         const countryOfOrigin = movieData.Country; // The country of origin is in the 'Country' field
         const movieTitle = movieData.Title; // Movie title from OMDB response
         
-        if (!countryOfOrigin || !countryOfOrigin.includes('India')) {
-            // Log movie title if the country is not India
+        // Determine if the movie is from India
+        const isIndian = countryOfOrigin && countryOfOrigin.includes('India');
+        const countryCheckResult = { isIndian, title: movieTitle };
+
+        // Cache the country check result
+        cache.set(countryCacheKey, compressData(countryCheckResult));
+
+        if (!isIndian) {
             console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is not from India. Skipping.`);
             return null; // If the country is not India, return null or handle it as needed
         }
 
-        // Step 4: Return the title from OMDB
+        // Step 4: Country is India, return the title from OMDB
         console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from India.`);
         
         // Step 5: Cache the title
         cache.set(cacheKey, compressData(movieTitle));
-
         return movieTitle; // Return the title directly from OMDB response
-    } catch (err) {
-        // Step 6: Error handling
-        console.error(`Error fetching movie data for IMDb ID: ${ttNumber}`, err.message);
-        return null;
-    }
 
-    return title; // Return the fetched title or null if not found
+    } catch (err) {
+        // Step 6: Error handling for OMDB API
+        console.error(`Error fetching movie data for IMDb ID: ${ttNumber} from OMDB API`, err.message);
+        
+        // Failsafe logic: Fetch title from IMDb suggestions API
+        console.log(`Attempting to fetch title from IMDb suggestions API for IMDb ID: ${ttNumber}.`);
+        
+        try {
+            const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+            
+            // Extract the title from the response
+            const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
+            title = movie ? movie.l : null;
+            
+            if (title) {
+                console.log(`Fetched title: "${title}" for IMDb ID: ${ttNumber}`);
+                // Step 5: Cache the title
+                cache.set(cacheKey, compressData(title));
+            } else {
+                console.log(`No title found for IMDb ID: ${ttNumber} in IMDb suggestions.`);
+            }
+            return title; // Return the title or null if not found
+        } catch (imdbErr) {
+            console.error(`Error fetching title from IMDb suggestions API for IMDb ID: ${ttNumber}`, imdbErr.message);
+            return null; // Return null if both API calls fail
+        }
+    }
 }
+
 
 // Optimized IP replacement
 const replaceIpInLink = (link) => {
-    console.log(`Original link: ${link}`);
+    //console.log(`Original link: ${link}`);
     const updatedLink = link.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/, 'cdn1.einthusan.io');
-    console.log(`Updated link: ${updatedLink}`);
+    //console.log(`Updated link: ${updatedLink}`);
     return updatedLink;
 };
 
@@ -377,7 +422,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         if (ttnumber) {
             const matchByTTNumber = results.find(movie => movie.id === ttnumber);
             if (matchByTTNumber) {
-                console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for Movie: ${title} (${ttnumber})`);
+                //console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for Movie: ${title} (${ttnumber})`);
                 cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID)); // Cache compressed ID
                 return matchByTTNumber.EinthusanID;
             }
