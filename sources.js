@@ -327,7 +327,7 @@ async function stream(einthusan_id, lang) {
             }]
         };
 
-        console.info(`Stream fetched successfully for: ${title} (${year}) in Language: ${lang}`);
+        console.info(`Stream Fetched Successfully For: ${title} (${year}) In Language: ${lang}`);
         cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
@@ -349,7 +349,7 @@ async function search(lang, slug) {
     }
 
     try {
-        console.info(`Searching for: ${slug} in language: ${lang}`);
+        console.info(`Searching For: ${slug} In Language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
         return results; // Return the search results directly without caching
