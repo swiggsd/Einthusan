@@ -349,7 +349,7 @@ async function search(lang, slug) {
     }
 
     try {
-        console.info(`Searching For: ${slug} In Language: ${lang}`);
+        //console.info(`Searching For: ${slug} In Language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
         return results; // Return the search results directly without caching
@@ -403,7 +403,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-            console.info(`Searching for: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang')}`);
+            console.info(`Searching For: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang')}`);
         }
         return resultsArray;
     } catch (err) {
