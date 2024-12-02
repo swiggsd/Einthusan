@@ -21,10 +21,10 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         await Promise.all(config.langs.map(async (lang) => {
             const movies = await getAllRecentMovies(maxPages, lang);
-            console.log(`Fetched ${movies.length} movies for language: ${lang}`);
+            //console.info(`Fetched ${movies.length} Movies For Language: ${lang}`);
         }));
     } catch (error) {
-        console.error("Error fetching movies for all languages:", error);
+        console.error("Error Fetching Movies For All Languages:", error);
     }
 };
 // Render Refresh Start
@@ -35,7 +35,7 @@ const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit
 setInterval(() => {
   const date = new Date();
   axios.get(renderUrl)
-    .then(res => console.log(`Reloaded at ${date.toLocaleString('en-US', options)}: Status ${res.status}`))
+    .then(res => console.info(`Reloaded at ${date.toLocaleString('en-US', options)}: Status ${res.status}`))
     .catch(err => console.error(`Error at ${date.toLocaleString('en-US', options)}: (${err.message})`));
 }, interval);
 // Render Refresh End
@@ -70,13 +70,13 @@ client.interceptors.response.use(undefined, async (err) => {
 
     config.retryCount = config.retryCount ?? 0;
     if (config.retryCount >= config.retries) {
-        console.error(`Request failed after ${config.retries} retries:`, err);
+        console.error(`Request Failed After ${config.retries} Retries:`, err);
         return Promise.reject(err);
     }
 
     config.retryCount += 1;
     const delay = config.retryDelay(config.retryCount);
-    console.log(`Retrying request... Attempt ${config.retryCount} after ${delay} ms`);
+    console.info(`Retrying Request... Attempt ${config.retryCount} After ${delay} ms`);
     await new Promise(resolve => setTimeout(resolve, delay));
     return client(config);
 });
@@ -104,7 +104,7 @@ const normalizeTitle = (str) => str.toLowerCase().replace(/[\s\W_]+/g, '');
 
 // Implement request queue to prevent rate limiting
 class RequestQueue {
-    constructor(concurrency = 20) {
+    constructor(concurrency = 50) {
         this.queue = [];
         this.running = 0;
         this.concurrency = concurrency;
@@ -112,7 +112,7 @@ class RequestQueue {
 
     async add(fn) {
         if (this.running >= this.concurrency) {
-            console.log('Request queue is full. Waiting for available slot...');
+            console.info('Request Queue is Full. Waiting For Available Slots...');
             await new Promise(resolve => this.queue.push(resolve));
         }
         this.running++;
@@ -134,7 +134,7 @@ const requestQueue = new RequestQueue();
 async function getImdbId(title, year) {
     // Validate the title
     if (typeof title !== 'string' || !title.trim()) {
-        console.error('Invalid title provided.');
+        console.error('Invalid Title Provided.');
         return null;
     }
 
@@ -144,7 +144,7 @@ async function getImdbId(title, year) {
 
         // Validate the year
         if (isNaN(year) || year < 1888 || year > new Date().getFullYear()) {
-            console.error('Invalid year provided. Year must be a number between 1888 and the current year.');
+            console.error('Invalid Year Provided. Year Must Be A Number Between 1888 And The Current Year.');
             return null;
         }
     }
@@ -153,7 +153,7 @@ async function getImdbId(title, year) {
     const cacheKey = `imdb_${normalizeTitle(title)}_${year || 'any'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        //console.log(`Cache hit for IMDb ID: ${title} ${year ? `(${year})` : ''}`);
+        //console.log(`Cache Hit For IMDb ID: ${title} ${year ? `(${year})` : ''}`);
         return decompressData(cached);
     }
 
@@ -163,15 +163,15 @@ async function getImdbId(title, year) {
         const result = await getImdbIdAsync({ name: title, year: year });
 
         if (result) {
-            //console.log(`Fetched IMDb ID: ${result} for Title: "${title}"${year ? ` (${year})` : ''}`);
+            //console.log(`Fetched IMDb ID: ${result} For Title: "${title}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
 
-        console.warn(`No result found for Title: "${title}"${year ? ` (${year})` : ''}`);
+        console.warn(`No Result Found For Title: "${title}"${year ? ` (${year})` : ''}`);
         return null;
     } catch (err) {
-        console.error(`Error fetching IMDb ID for "${title}":`, err.message);
+        console.error(`Error Fetching IMDb ID For "${title}":`, err.message);
         return null;
     }
 }
@@ -188,7 +188,7 @@ async function ttnumberToTitle(ttNumber) {
     
     if (cachedTitle) {
         const title = decompressData(cachedTitle); // Decompress the cached title
-        console.log(`Cache hit for title "${title}" of IMDb ID: ${ttNumber}`);
+        //console.log(`Cache hit for title "${title}" of IMDb ID: ${ttNumber}`);
         return title; // Return cached title
     }
 
@@ -198,10 +198,10 @@ async function ttnumberToTitle(ttNumber) {
         const { isIndian, title } = decompressData(cachedCountry);
         //console.log(`Cache hit for country check of IMDb ID: ${ttNumber} Title: ${title}`);
         if (isIndian) {
-            console.log(`Returning cached title for Indian movie: "${title}"`);
+            console.info(`Returning Cached Title for Indian movie: "${title}"`);
             return title;
         } else {
-            console.log(`Cached Result: Movie: ${title} (IMDb ID: ${ttNumber}) is not from India. Skipping.`);
+            console.info(`Cached Result: Movie: ${title} (IMDb ID: ${ttNumber}) Is Not From India. Skipping.`);
             return null; // If the country is not India, return null
         }
     }
@@ -212,7 +212,7 @@ async function ttnumberToTitle(ttNumber) {
         // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
         const omdbApiKey = process.env.OMDB_API_KEY; // Access the API key from environment variables
         if (!omdbApiKey) {
-            console.error("OMDB API key is missing in environment variables.");
+            console.error("OMDB API Key Is Missing In Environment Variable.");
             return null; // If API key is not found, return null
         }
 
@@ -232,12 +232,12 @@ async function ttnumberToTitle(ttNumber) {
         cache.set(countryCacheKey, compressData(countryCheckResult));
 
         if (!isIndian) {
-            console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is not from India. Skipping.`);
+            console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From India. Skipping.`);
             return null; // If the country is not India, return null or handle it as needed
         }
 
         // Step 4: Country is India, return the title from OMDB
-        console.log(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from India. Continuing.`);
+        console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is From India. Continuing.`);
         
         // Step 5: Cache the title
         cache.set(cacheKey, compressData(movieTitle));
@@ -245,10 +245,10 @@ async function ttnumberToTitle(ttNumber) {
 
     } catch (err) {
         // Step 6: Error handling for OMDB API
-        console.error(`Error fetching movie data for IMDb ID: ${ttNumber} from OMDB API`, err.message);
+        console.error(`Error Fetching Movie Data For IMDb ID: ${ttNumber} From OMDB API`, err.message);
         
         // Failsafe logic: Fetch title from IMDb suggestions API
-        console.log(`Attempting to fetch title from IMDb suggestions API for IMDb ID: ${ttNumber}.`);
+        console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
         
         try {
             const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
@@ -259,15 +259,15 @@ async function ttnumberToTitle(ttNumber) {
             title = movie ? movie.l : null;
             
             if (title) {
-                console.log(`Fetched title: "${title}" for IMDb ID: ${ttNumber}`);
+                console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
                 // Step 5: Cache the title
                 cache.set(cacheKey, compressData(title));
             } else {
-                console.log(`No title found for IMDb ID: ${ttNumber} in IMDb suggestions.`);
+                console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
             }
             return title; // Return the title or null if not found
         } catch (imdbErr) {
-            console.error(`Error fetching title from IMDb suggestions API for IMDb ID: ${ttNumber}`, imdbErr.message);
+            console.error(`Error Fetching Title From IMDb Suggestions API For IMDb ID: ${ttNumber}`, imdbErr.message);
             return null; // Return null if both API calls fail
         }
     }
@@ -286,13 +286,13 @@ const replaceIpInLink = (link) => {
 async function stream(einthusan_id, lang) {
      // Check if lang is undefined
      if (typeof lang === 'undefined') {
-        console.error("Error: 'lang' parameter is undefined.");
+        console.error("Error: 'lang' Parameter Is Undefined.");
         return; // Exit the function early
     }
     const cacheKey = `stream_${einthusan_id}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache hit for stream: ${einthusan_id}`);
+        console.info(`Cache Hit For Stream: ${einthusan_id} in Language: ${lang}`);
         return decompressData(cached);
     }
 
@@ -303,10 +303,10 @@ async function stream(einthusan_id, lang) {
         einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
         // Check if einthusan_id is undefined after the function call
         if (typeof einthusan_id === 'undefined') {
-        throw new Error(`Einthusan ID could not be retrieved for Title: ${title}`);}}
+        throw new Error(`Einthusan ID could not be retrieved for Title: ${title} in Language: ${lang}`);}}
             
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-        console.log(`Fetching stream from URL: ${url}`);
+        //console.log(`Fetching stream from URL: ${url}`);
         const response = await requestQueue.add(() => client.get(url));
         const $ = cheerio.load(response.data);
         
@@ -327,14 +327,19 @@ async function stream(einthusan_id, lang) {
             }]
         };
 
-        console.log(`Stream fetched successfully for: ${title} (${year})`);
+        console.info(`Stream fetched successfully for: ${title} (${year}) in Language: ${lang}`);
         cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
-        console.error("Error in Stream Function:", err.message);
-    }
+        // Check if the error is the specific one you want to ignore
+        if (err.message.includes("Einthusan ID could not be retrieved")) {
+            // Handle the specific error silently (do nothing or set a flag)
+        } else {
+            // Log other errors
+            console.error("Error in Stream Function:", err.message);
+        }
 }
-
+}
 // Optimized search function with batch processing
 async function search(lang, slug) {
     // Check if lang is undefined
@@ -344,7 +349,7 @@ async function search(lang, slug) {
     }
 
     try {
-        console.log(`Searching for: ${slug} in language: ${lang}`);
+        console.info(`Searching for: ${slug} in language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
         return results; // Return the search results directly without caching
@@ -398,7 +403,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-           console.log(`Fetched ${Array.isArray(resultsArray) ? resultsArray.length : 0} Catalog Results from URL: ${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`);
+            console.info(`Searching for: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang')}`);
         }
         return resultsArray;
     } catch (err) {
@@ -417,7 +422,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache hit for Einthusan ID by title: ${title}`);
+        //console.info(`Cache hit for Einthusan ID by title: ${title}`);
         return decompressData(cached);
     }
 
@@ -439,7 +444,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
                 return matchByTTNumber.EinthusanID;
             }
             // Move the error throw outside of the if statement
-            throw new Error(`No match found for for Movie: ${title} (${ttnumber})`);
+            throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${lang}`);
         }
 
         // If no ttnumber is provided, proceed with the title search
@@ -447,7 +452,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
         
         if (match) {
-            console.log(`Found Einthusan ID: ${match.EinthusanID} for Title: ${title}`);
+            //console.info(`Found Einthusan ID: ${match.EinthusanID} for Title: ${title}`);
             cache.set(cacheKey, compressData(match.EinthusanID)); // Cache compressed ID
             return match.EinthusanID;
         }
@@ -464,18 +469,18 @@ async function getAllRecentMovies(maxPages, lang) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache hit for recent movies: ${lang}, max pages: ${maxPages}`);
+        console.log(`Cache Hit For Recent Movies: ${lang}, Max Pages: ${maxPages}`);
         return decompressData(cached);
     }
 
     try {
-        console.log(`Fetching all recent movies for language: ${lang}, max pages: ${maxPages}`);
+        console.info(`Fetching All Recent Movies For Language: ${lang}, Max Pages: ${maxPages}`);
         
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
-                console.log(`Fetching page: ${pageUrl}`);
+                console.info(`Fetching Page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
                 
                 if (response.status === 200) {
@@ -530,7 +535,7 @@ async function getAllRecentMovies(maxPages, lang) {
                 );
 
                 const validMovies = movies.filter(Boolean);
-                console.log(`Fetched ${validMovies.length} movies from page: ${page}`);
+                console.info(`Fetched ${validMovies.length} Movies From Page: ${page} In Language: ${lang}`);
                 return validMovies;
             } catch (err) {
                 if (retries > 0) {
@@ -562,7 +567,7 @@ async function getAllRecentMovies(maxPages, lang) {
         });
 
         const results = Array.from(uniqueMovies.values());
-        console.log(`Fetched a total of ${results.length} unique recent movies.`);
+        console.info(`Fetched A Total Of ${results.length} Unique Recent Movies In Language: ${lang}.`);
 
         // Cache final results for 12 hours with compression
         cache.set(cacheKey, compressData(results), 43200);
