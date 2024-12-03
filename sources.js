@@ -478,7 +478,7 @@ async function getAllRecentMovies(maxPages, lang) {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
-                console.info(`Fetching Page: ${pageUrl}`);
+                //console.info(`Fetching Page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
                 
                 if (response.status === 200) {
