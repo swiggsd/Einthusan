@@ -484,7 +484,7 @@ async function getAllRecentMovies(maxPages, lang) {
                 if (response.status === 200) {
                     const body = response.data; // Adjust based on your response format
                     if (body.includes('<title>Rate Limited - Einthusan</title>')) {
-                        console.error(`Rate limited on page ${page}. Waiting for 10 seconds before retrying...`);
+                        //console.error(`Rate limited on page ${page}. Waiting for 10 seconds before retrying...`);
                         await sleep(10000); // Wait for 10 seconds
                         return fetchPage(page, lang, retries); // Retry the same page
                     }
