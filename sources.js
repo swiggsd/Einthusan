@@ -21,7 +21,7 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         await Promise.all(config.langs.map(async (lang) => {
             const movies = await getAllRecentMovies(maxPages, lang);
-            //console.info(`Fetched ${movies.length} Movies For Language: ${lang}`);
+            //console.info(`Fetched ${movies.length} Movies For Language: ${capitalizeFirstLetter(lang)}`);
         }));
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
@@ -292,8 +292,10 @@ async function stream(einthusan_id, lang) {
     const cacheKey = `stream_${einthusan_id}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.info(`Cache Hit For Stream: ${einthusan_id} in Language: ${lang}`);
-        return decompressData(cached);
+        const cachedResult = decompressData(cached);
+        const cachedTitle = cachedResult.streams[0].title;
+        console.info(`Cache Hit For Stream: ${cachedTitle} (${einthusan_id})`);
+        return cachedResult;
     }
 
     try {
@@ -303,7 +305,7 @@ async function stream(einthusan_id, lang) {
         einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
         // Check if einthusan_id is undefined after the function call
         if (typeof einthusan_id === 'undefined') {
-        throw new Error(`Einthusan ID could not be retrieved for Title: ${title} in Language: ${lang}`);}}
+        throw new Error(`Einthusan ID could not be retrieved for Title: ${title} in Language: ${capitalizeFirstLetter(lang)}`);}}
             
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         //console.log(`Fetching stream from URL: ${url}`);
@@ -322,12 +324,12 @@ async function stream(einthusan_id, lang) {
         const result = {
             streams: [{
                 url: mp4Link,
-                name: `EinthusanTV - ${capitalizedLang}`,
-                title: `${title} (${year})`
+                name: `EinthusanTV`,
+                title: `${title} (${year})\n 🌍 ${capitalizedLang}`
             }]
         };
 
-        console.info(`Stream Fetched Successfully For: ${title} (${year}) In Language: ${lang}`);
+        console.info(`Stream Fetched Successfully For: ${title} (${year}) (EinthusanID: ${einthusan_id}) In Language: ${capitalizeFirstLetter(lang)}`);
         cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
@@ -403,7 +405,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-            console.info(`Searching For: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang')}`);
+            console.info(`Searching For: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}`);
         }
         return resultsArray;
     } catch (err) {
@@ -421,11 +423,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
 
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
-    if (cached) {
-        //console.info(`Cache hit for Einthusan ID by title: ${title}`);
-        return decompressData(cached);
-    }
-
+    
     try {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
         const results = await getcatalogresults(url);
@@ -444,7 +442,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
                 return matchByTTNumber.EinthusanID;
             }
             // Move the error throw outside of the if statement
-            throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${lang}`);
+            throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
         }
 
         // If no ttnumber is provided, proceed with the title search
@@ -469,12 +467,12 @@ async function getAllRecentMovies(maxPages, lang) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache Hit For Recent Movies: ${lang}, Max Pages: ${maxPages}`);
+        console.log(`Cache Hit For Recent Movies: ${capitalizeFirstLetter(lang)}, Max Pages: ${maxPages}`);
         return decompressData(cached);
     }
 
     try {
-        console.info(`Fetching All Recent Movies For Language: ${lang}, Max Pages: ${maxPages}`);
+        console.info(`Fetching All Recent Movies For Language: ${capitalizeFirstLetter(lang)}, Max Pages: ${maxPages}`);
         
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
@@ -535,7 +533,7 @@ async function getAllRecentMovies(maxPages, lang) {
                 );
 
                 const validMovies = movies.filter(Boolean);
-                console.info(`Fetched ${validMovies.length} Movies From Page: ${page} In Language: ${lang}`);
+                console.info(`Fetched ${validMovies.length} Movies From Page: ${page} In Language: ${capitalizeFirstLetter(lang)}`);
                 return validMovies;
             } catch (err) {
                 if (retries > 0) {
@@ -567,7 +565,7 @@ async function getAllRecentMovies(maxPages, lang) {
         });
 
         const results = Array.from(uniqueMovies.values());
-        console.info(`Fetched A Total Of ${results.length} Unique Recent Movies In Language: ${lang}.`);
+        console.info(`Fetched A Total Of ${results.length} Unique Recent Movies In Language: ${capitalizeFirstLetter(lang)}`);
 
         // Cache final results for 12 hours with compression
         cache.set(cacheKey, compressData(results), 43200);
