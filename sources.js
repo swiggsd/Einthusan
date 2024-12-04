@@ -324,7 +324,7 @@ async function stream(einthusan_id, lang) {
         const result = {
             streams: [{
                 url: mp4Link,
-                name: `EinthusanTV`,
+                name: `EinthusanTV ⚡️`,
                 title: `🍿 ${title} (${year})\n 🌐 ${capitalizedLang}`
             }]
         };
