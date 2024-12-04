@@ -24,14 +24,23 @@ const cache = new NodeCache({
 // Function to fetch recent movies for all languages
 const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
+        const results = {};
+        // Fetch movies for all languages in parallel
         await Promise.all(config.langs.map(async (lang) => {
-            const movies = await getAllRecentMovies(maxPages, lang);
-            //console.info(`Fetched ${movies.length} Movies For Language: ${capitalizeFirstLetter(lang)}`);
+            const movies = await getAllRecentMovies(maxPages, lang, false);
+            results[lang] = movies;
         }));
+        // Final summary log
+        console.info(`\n\x1b[1m\x1b[33m=== Final Summary ===\x1b[0m`);
+        for (const [lang, movies] of Object.entries(results)) {
+            console.info(`\x1b[33mFetched A Total Of \x1b[0m\x1b[32m${movies.length}\x1b[0m\x1b[33m Unique Recent Movies In Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m`);
+        }
+        return results;
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
     }
 };
+
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
 const interval = 10 * 60 * 1000; // 10 minutes in milliseconds
@@ -117,7 +126,7 @@ class RequestQueue {
 
     async add(fn) {
         if (this.running >= this.concurrency) {
-            console.info('Request Queue is Full. Waiting For Available Slots...');
+            //console.info('Request Queue is Full. Waiting For Available Slots...');
             await new Promise(resolve => this.queue.push(resolve));
         }
         this.running++;
@@ -173,7 +182,7 @@ async function getImdbId(title, year) {
             return result;  // Return the result immediately after caching
         }
 
-        console.warn(`No Result Found For Title: "${title}"${year ? ` (${year})` : ''}`);
+        console.warn(`\x1b[33mNo IMDB ID Not Found For Title: \x1b[0m\x1b[36m"${title}"\x1b[0m${year ? ` \x1b[33m(${year})\x1b[0m` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error Fetching IMDb ID For "${title}":`, err.message);
@@ -468,16 +477,20 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
 }
 
 // Optimized function to get all recent movies with parallel processing
-async function getAllRecentMovies(maxPages, lang) {
+async function getAllRecentMovies(maxPages, lang, logSummary = true) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        console.log(`Cache Hit For Recent Movies: ${capitalizeFirstLetter(lang)}, Max Pages: ${maxPages}`);
+        if (logSummary) {
+            console.log(`\x1b[32mCache Hit For Recent Movies:\x1b[0m \x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m, \x1b[33mMax Pages:\x1b[0m \x1b[32m${maxPages}\x1b[0m`);
+        }
         return decompressData(cached);
     }
 
     try {
-        console.info(`\x1b[33mFetching All Recent Movies For Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m\x1b[33m, Max Pages: \x1b[0m\x1b[32m${maxPages}\x1b[0m`);
+        if (logSummary) {
+            console.info(`\x1b[33mFetching All Recent Movies For Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m\x1b[33m, Max Pages: \x1b[0m\x1b[32m${maxPages}\x1b[0m`);
+        }
         
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
@@ -570,7 +583,10 @@ async function getAllRecentMovies(maxPages, lang) {
         });
 
         const results = Array.from(uniqueMovies.values());
-        console.info(`\x1b[33mFetched A Total Of \x1b[0m\x1b[32m${results.length}\x1b[0m\x1b[33m Unique Recent Movies In Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m`);
+        if (logSummary) {
+            console.info(`\x1b[33mFetched A Total Of \x1b[0m\x1b[32m${results.length}\x1b[0m\x1b[33m Unique Recent Movies In Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m`);
+        }
+
 
         // Cache final results for 12 hours with compression
         cache.set(cacheKey, compressData(results), 43200);
