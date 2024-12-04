@@ -402,7 +402,7 @@ async function getcatalogresults(url) {
 
                 if (!img || !year || !title || !einthusanId) return null;
 
-                const Id = await getId(title, year);
+                const Id = await getImdbId(title, year);
                 return {
                     id: Id,
                     EinthusanID: einthusanId,
@@ -488,11 +488,9 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
     }
 
     try {
-        if (logSummary) {
             console.info(`\x1b[33mFetching All Recent Movies For Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m\x1b[33m, Max Pages: \x1b[0m\x1b[32m${maxPages}\x1b[0m`);
-        }
         
-        const fetchPage = async (page, retries = 3) => {
+            const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
@@ -502,8 +500,8 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                 if (response.status === 200) {
                     const body = response.data; // Adjust based on your response format
                     if (body.includes('<title>Rate Limited - Einthusan</title>')) {
-                        //console.error(`Rate limited on page ${page}. Waiting for 10 seconds before retrying...`);
-                        await sleep(10000); // Wait for 10 seconds
+                        //console.error(`Rate limited on page ${page}. Waiting for 5 seconds before retrying...`);
+                        await sleep(5000); // Wait for 5 seconds
                         return fetchPage(page, lang, retries); // Retry the same page
                     }
                 }
@@ -562,7 +560,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                     return [];
                 }
             } finally {
-                await sleep(2000); // Delay between requests to avoid rate limiting
+                await sleep(1000); // Delay between requests to avoid rate limiting
             }
         };
 
