@@ -153,7 +153,7 @@
 
 <script setup>
 import { reactive, ref, onMounted } from 'vue';
-import Modal from 'flowbite/src/components/modal';
+import 'flowbite';
 import { useHead } from "@vueuse/head";
 import * as manifest from '../../manifest.json';
 
