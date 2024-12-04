@@ -182,7 +182,7 @@ async function getImdbId(title, year) {
             return result;  // Return the result immediately after caching
         }
 
-        console.warn(`\x1b[33mNo IMDB ID Not Found For Title: \x1b[0m\x1b[36m"${title}"\x1b[0m${year ? ` \x1b[33m(${year})\x1b[0m` : ''}`);
+        console.warn(`\x1b[33mIMDB ID Not Found For Title: \x1b[0m\x1b[36m"${title}"\x1b[0m${year ? ` \x1b[33m(${year})\x1b[0m` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error Fetching IMDb ID For "${title}":`, err.message);
@@ -262,7 +262,7 @@ async function ttnumberToTitle(ttNumber) {
         console.error(`Error Fetching Movie Data For IMDb ID: ${ttNumber} From OMDB API`, err.message);
         
         // Failsafe logic: Fetch title from IMDb suggestions API
-        cconsole.info(`\x1b[33mAttempting To Fetch Title From IMDb Suggestions API For IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m.`);
+        console.info(`\x1b[33mAttempting To Fetch Title From IMDb Suggestions API For IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m.`);
         
         try {
             const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
@@ -402,9 +402,9 @@ async function getcatalogresults(url) {
 
                 if (!img || !year || !title || !einthusanId) return null;
 
-                const imdbId = await getImdbId(title, year);
+                const Id = await getId(title, year);
                 return {
-                    id: imdbId,
+                    id: Id,
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
