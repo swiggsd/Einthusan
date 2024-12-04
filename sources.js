@@ -8,6 +8,11 @@ const NodeCache = require("node-cache");
 const { promisify } = require('util');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const zlib = require('zlib'); // Import zlib for compression
+const reset = '\x1b[0m'; // Reset color
+const red = '\x1b[31m';
+const green = '\x1b[32m';
+const yellow = '\x1b[33m';
+const cyan = '\x1b[36m';
 // Enhanced caching configuration
 const cache = new NodeCache({
     stdTTL: 30 * 60, // 30 minutes default TTL
@@ -232,12 +237,12 @@ async function ttnumberToTitle(ttNumber) {
         cache.set(countryCacheKey, compressData(countryCheckResult));
 
         if (!isIndian) {
-            console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From India. Skipping.`);
+            console.info(`\x1b[33mMovie "\x1b[0m\x1b[36m${movieTitle}\x1b[0m\x1b[33m" (IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m\x1b[33m) Is Not From India. Skipping.\x1b[0m`);
             return null; // If the country is not India, return null or handle it as needed
         }
 
         // Step 4: Country is India, return the title from OMDB
-        console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is From India. Continuing.`);
+        console.info(`\x1b[33mMovie "\x1b[0m\x1b[36m${movieTitle}\x1b[0m\x1b[33m" (IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m\x1b[33m) Is From India. Continuing.\x1b[0m`);
         
         // Step 5: Cache the title
         cache.set(cacheKey, compressData(movieTitle));
@@ -248,7 +253,7 @@ async function ttnumberToTitle(ttNumber) {
         console.error(`Error Fetching Movie Data For IMDb ID: ${ttNumber} From OMDB API`, err.message);
         
         // Failsafe logic: Fetch title from IMDb suggestions API
-        console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
+        cconsole.info(`\x1b[33mAttempting To Fetch Title From IMDb Suggestions API For IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m.`);
         
         try {
             const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
@@ -259,7 +264,7 @@ async function ttnumberToTitle(ttNumber) {
             title = movie ? movie.l : null;
             
             if (title) {
-                console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                console.info(`\x1b[33mFetched Title: "\x1b[0m\x1b[36m${title}\x1b[0m\x1b[33m" For IMDb ID: \x1b[0m\x1b[32m${ttNumber}\x1b[0m`);
                 // Step 5: Cache the title
                 cache.set(cacheKey, compressData(title));
             } else {
@@ -294,7 +299,7 @@ async function stream(einthusan_id, lang) {
     if (cached) {
         const cachedResult = decompressData(cached);
         const cachedTitle = cachedResult.streams[0].title;
-        console.info(`Cache Hit For Stream: ${cachedTitle} (${einthusan_id})`);
+        console.info(`${green}Cache Hit For Stream:${reset} ${cyan}${cachedTitle}${reset} ${yellow}(${einthusan_id})${reset}`);
         return cachedResult;
     }
 
@@ -324,12 +329,12 @@ async function stream(einthusan_id, lang) {
         const result = {
             streams: [{
                 url: mp4Link,
-                name: `EinthusanTV ⚡️`,
+                name: `Einthusan ⚡️`,
                 title: `🍿 ${title} (${year})\n 🌐 ${capitalizedLang}`
             }]
         };
 
-        console.info(`Stream Fetched Successfully For: ${title} (${year}) (EinthusanID: ${einthusan_id}) In Language: ${capitalizeFirstLetter(lang)}`);
+        console.info(`${green}Stream Fetched Successfully For:${reset} ${cyan}${title}${reset} ${yellow}(${year})${reset} ${red}(EinthusanID: ${einthusan_id})${reset} ${green}In Language:${reset} ${capitalizeFirstLetter(lang)}`);
         cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
@@ -405,7 +410,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-            console.info(`Searching For: ${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')} in Language: ${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}`);
+            console.info(`\x1b[32mSearching For:\x1b[0m \x1b[36m${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')}\x1b[0m \x1b[33min Language:\x1b[0m \x1b[35m${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}\x1b[0m`);
         }
         return resultsArray;
     } catch (err) {
@@ -472,7 +477,7 @@ async function getAllRecentMovies(maxPages, lang) {
     }
 
     try {
-        console.info(`Fetching All Recent Movies For Language: ${capitalizeFirstLetter(lang)}, Max Pages: ${maxPages}`);
+        console.info(`\x1b[33mFetching All Recent Movies For Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m\x1b[33m, Max Pages: \x1b[0m\x1b[32m${maxPages}\x1b[0m`);
         
         const fetchPage = async (page, retries = 3) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
@@ -565,7 +570,7 @@ async function getAllRecentMovies(maxPages, lang) {
         });
 
         const results = Array.from(uniqueMovies.values());
-        console.info(`Fetched A Total Of ${results.length} Unique Recent Movies In Language: ${capitalizeFirstLetter(lang)}`);
+        console.info(`\x1b[33mFetched A Total Of \x1b[0m\x1b[32m${results.length}\x1b[0m\x1b[33m Unique Recent Movies In Language: \x1b[0m\x1b[36m${capitalizeFirstLetter(lang)}\x1b[0m`);
 
         // Cache final results for 12 hours with compression
         cache.set(cacheKey, compressData(results), 43200);
