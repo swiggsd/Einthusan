@@ -325,7 +325,7 @@ async function stream(einthusan_id, lang) {
             streams: [{
                 url: mp4Link,
                 name: `EinthusanTV`,
-                title: `${title} (${year})\n 🌍 ${capitalizedLang}`
+                title: `🍿 ${title} (${year})\n 🌐 ${capitalizedLang}`
             }]
         };
 
