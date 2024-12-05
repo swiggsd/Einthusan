@@ -242,12 +242,12 @@ async function ttnumberToTitle(ttNumber) {
         cache.set(countryCacheKey, compressData(countryCheckResult));
 
         if (!isIndian) {
-            console.info(`${useColors ? '\x1b[33m' : ''}Movie "\x1b[0m${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}" (IMDb ID: \x1b[0m${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}) Is Not From India. Skipping.\x1b[0m`);
+            console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is Not From India. Skipping.`);
             return null; // If the country is not India, return null or handle it as needed
         }
 
         // Step 4: Country is India, return the title from OMDB
-        console.info(`${useColors ? '\x1b[33m' : ''}Movie "\x1b[0m${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}" (IMDb ID: \x1b[0m${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}) Is From India. Continuing.\x1b[0m`);
+        console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is From India. Continuing.`);
         
         // Step 5: Cache the title
         cache.set(cacheKey, compressData(movieTitle));
