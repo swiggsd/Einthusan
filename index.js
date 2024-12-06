@@ -8,6 +8,15 @@ const config = require('./config');
 const manifest = require("./manifest");
 require('dotenv').config();
 const app = express();
+const rateLimit = require('express-rate-limit');
+// Create a global rate limiter
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    message: "Too many requests from this IP, please try again later."
+});
+// Apply the rate limiter globally
+app.use(globalLimiter);
 
 // Schedule the fetch every 12 hours (43200000 milliseconds)
 setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
