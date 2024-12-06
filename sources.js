@@ -188,6 +188,13 @@ async function getImdbId(title, year) {
 
 // Optimized title fetching from IMDb
 async function ttnumberToTitle(ttNumber) {
+    // Regular expression to validate the IMDb ID format (7 or 8 digits)
+    const ttNumberRegex = /^tt\d{7,8}$/;
+
+    // Validate the ttNumber
+    if (!ttNumberRegex.test(ttNumber)) {
+        throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
+    }
     // Step 1: Generate cache keys for the IMDb ID and country check
     const cacheKey = `title_${ttNumber}`;
     const countryCacheKey = `country_${ttNumber}`;
@@ -255,7 +262,7 @@ async function ttnumberToTitle(ttNumber) {
 
     } catch (err) {
         // Step 6: Error handling for OMDB API
-        console.error(`Error Fetching Movie Data For IMDb ID: ${ttNumber} From OMDB API`, err.message);
+        console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
         
         // Failsafe logic: Fetch title from IMDb suggestions API
         console.info(`${useColors ? '\x1b[33m' : ''}Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: \x1b[0m${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}.`);
@@ -277,7 +284,7 @@ async function ttnumberToTitle(ttNumber) {
             }
             return title; // Return the title or null if not found
         } catch (imdbErr) {
-            console.error(`Error Fetching Title From IMDb Suggestions API For IMDb ID: ${ttNumber}`, imdbErr.message);
+            console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, imdbErr.message);
             return null; // Return null if both API calls fail
         }
     }
@@ -299,12 +306,13 @@ async function stream(einthusan_id, lang) {
         console.error("Error: 'lang' Parameter Is Undefined.");
         return; // Exit the function early
     }
+    const imdb = einthusan_id;
     const cacheKey = `stream_${einthusan_id}_${lang}`;
     const cached = cache.get(cacheKey);
     if (cached) {
         const cachedResult = decompressData(cached);
         const cachedTitle = cachedResult.streams[0].title;
-        console.info(`${useColors ? '\x1b[32m' : ''}Cache Hit For Stream: ${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${cachedTitle}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${einthusan_id})${useColors ? '\x1b[0m' : ''}`);
+        console.info(`${useColors ? '\x1b[32m' : ''}Cache Hit For Stream:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${cachedTitle}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${einthusan_id})${useColors ? '\x1b[0m' : ''}`);
         return cachedResult;
     }
 
@@ -335,11 +343,11 @@ async function stream(einthusan_id, lang) {
             streams: [{
                 url: mp4Link,
                 name: `Einthusan ⚡️`,
-                title: `🍿${title} (${year})\n 🌐 ${capitalizedLang}`
+                title: `🍿 ${title} (${year})\n 🌐 ${capitalizedLang}`
             }]
         };
 
-        console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizeFirstLetter(lang)}`);
+        console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizeFirstLetter(lang)}`);
         cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
         return result;
     } catch (err) {
