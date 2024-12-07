@@ -147,44 +147,40 @@ async function getImdbId(title, year) {
         console.error('Invalid Title Provided.');
         return null;
     }
-
+    // Remove the year and any additional text (e.g., "Film") after the year from the title
+    const cleanedTitle = title.replace(/\s?\(\d{4}(?:\s+[A-Za-z]+)*\)$/, '').replace(/\s?\d{4}(\s+[A-Za-z]+)*$/, '').replace(/#/g, '').trim();
     // Convert year to a number if it is provided
     if (year !== undefined) {
         year = Number(year); // Convert to number
-
         // Validate the year
         if (isNaN(year) || year < 1888 || year > new Date().getFullYear()) {
             console.error('Invalid Year Provided. Year Must Be A Number Between 1888 And The Current Year.');
             return null;
         }
     }
-
-    // Create a cache key that includes both title and year
-    const cacheKey = `imdb_${normalizeTitle(title)}_${year || 'any'}`;
+    // Create a cache key that includes both the cleaned title and year
+    const cacheKey = `imdb_${normalizeTitle(cleanedTitle)}_${year || 'any'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
-        //console.log(`Cache Hit For IMDb ID: ${title} ${year ? `(${year})` : ''}`);
+        //console.log(`Cache Hit For IMDb ID: ${cleanedTitle} ${year ? `(${year})` : ''}`);
         return decompressData(cached);
     }
-
     try {
-        
-        // Call the promisified version of nameToImdb
-        const result = await getImdbIdAsync({ name: title, year: year });
-
+        // Call the promisified version of nameToImdb with both cleanedTitle and year
+        const result = await getImdbIdAsync({ name: cleanedTitle, year: year });
         if (result) {
-            //console.log(`Fetched IMDb ID: ${result} For Title: "${title}"${year ? ` (${year})` : ''}`);
+            //console.log(`Fetched IMDb ID: ${result} For Title: "${cleanedTitle}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
-
-        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${title}"${useColors ? '\x1b[0m' : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
+        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
         return null;
     } catch (err) {
-        console.error(`Error Fetching IMDb ID For "${title}":`, err.message);
+        console.error(`Error Fetching IMDb ID For "${cleanedTitle}":`, err.message);
         return null;
     }
 }
+
 
 // Optimized title fetching from IMDb
 async function ttnumberToTitle(ttNumber) {
