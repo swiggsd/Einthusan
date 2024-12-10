@@ -695,15 +695,20 @@ async function meta(einthusan_id, lang) {
         const metaObj = {
             id: `einthusan_${einthusan_id}`,
             EinthusanID: einthusanId,
-            type: "movie",
             name: title,
+            cast: actors,
             description,
             poster: img.startsWith('http') ? img : `https:${img}`,
             background: img.startsWith('http') ? img : `https:${img}`,
             releaseInfo: year,
             posterShape: 'poster',
-            cast: actors,
-            trailers: trailer ? [{ source: trailer, type: "Trailer" }] : []
+            trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
+            links: [...actors.map(actor => ({
+                name: actor,
+                category: "Cast",
+                url: `stremio:///search?search=${encodeURIComponent(actor)}`
+            })),],
+            type: "movie",
         };
         cache.set(einthusan_id, metaObj);
         return metaObj;
