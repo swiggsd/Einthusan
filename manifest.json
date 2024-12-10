@@ -1,14 +1,14 @@
 {
     "id": "community.einthusantv",
-    "version": "2.6.0",
+    "version": "2.7.0",
     "name": "EinthusanTV",
     "description": "Addon for Streaming from EinthusanTV by Asaddon",
     "logo": "https://i.imgur.com/hmTKdwR.png",
 	"background":"https://raw.githubusercontent.com/Stremio/stremio-art/main/originals/Ahlen%20Ken%20A.%20Batalon.png",
     "catalogs": [],
-    "resources": ["stream","catalog"],
+    "resources": ["stream","catalog","meta"],
     "types": ["movie"],
-    "idPrefixes": ["tt"],
+    "idPrefixes": ["tt","einthusan"],
     "behaviorHints": {
         "configurable": true,
         "configurationRequired": true

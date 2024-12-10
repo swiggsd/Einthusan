@@ -158,12 +158,27 @@ app.get('/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     try {
         const { id, configuration } = req.params;
         let streams;
-
-        if (id.startsWith("tt")) {
+        if (id.startsWith("einthusan") || id.startsWith("tt")) {
             streams = await sources.stream(id, configuration);
         }
 
         return res.json({ streams: streams?.streams || [] });
+    } catch (e) {
+        console.error(e);
+        return res.status(500).send({ error: 'Internal Server Error' });
+    }
+});
+
+
+app.get('/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
+    setCommonHeaders(res);
+    try {
+        const { id, configuration } = req.params;
+        let meta;
+        if (id.startsWith("einthusan") || id.startsWith("tt")) {
+            meta = await sources.meta(id, configuration);
+        }
+        return res.json({ meta: meta || [] });
     } catch (e) {
         console.error(e);
         return res.status(500).send({ error: 'Internal Server Error' });
