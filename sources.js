@@ -173,7 +173,7 @@ async function getImdbId(title, year) {
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
-        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
+        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Cleaned Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Orignal Title: ${useColors ? '\x1b[36m' : ''}"${title}"${useColors ? '\x1b[0m' : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error Fetching IMDb ID For "${cleanedTitle}":`, err.message);
@@ -387,7 +387,6 @@ async function stream(einthusan_id, lang) {
     } catch (err) {
         // Handle specific and general errors
         if (err.message.includes("Einthusan ID could not be retrieved")) {
-            console.warn("Specific error encountered and handled silently:", err.message);
         } else {
             console.error("Error in Stream Function:", err.message);
         }
@@ -448,8 +447,7 @@ async function getcatalogresults(url) {
                     type: "movie",
                     name: title,
                     poster: img.startsWith('http') ? img : `https:${img}`,
-                    releaseInfo: year,
-                    posterShape: 'poster'
+                    releaseInfo: year
                 };
             });
 
@@ -508,10 +506,10 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
             return match.EinthusanID;
         }
         
-        throw new Error(`No match found for Title: ${title}`);
+        //throw new Error(`No match found for Title: ${title}`);
     } catch (err) {
         // Log only the concise error message
-        console.error("Error in GetEinthusanIdByTitle Function:", err.message); // Only log the error message
+        console.error(err.message); // Only log the error message
     }
 }
 
@@ -529,7 +527,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
     try {
         console.info(`${useColors ? '\x1b[33m' : ''}Fetching All Recent Movies For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}, Max Pages: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
         
-            const fetchPage = async (page, retries = 3) => {
+            const fetchPage = async (page, retries = 10) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
@@ -576,13 +574,12 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
 
                         const imdbId = await getImdbId(title, year);
                         return {
-                            id: imdbId,
+                            id: imdbId || `einthusan_${einthusanId}`,
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
                             poster: img.startsWith('http') ? img : `https:${img}`,
-                            releaseInfo: year,
-                            posterShape: 'poster'
+                            releaseInfo: year
                         };
                     })
                 );
@@ -649,11 +646,11 @@ async function meta(einthusan_id, lang) {
                 if (einthusanId) {
                     einthusan_id = einthusanId;  // Update the einthusan_id with the retrieved value
                 } else {
-                    console.error("Error: Unable to retrieve Einthusan ID for ttNumber:", einthusan_id);
+                   // console.error("Error: Unable to retrieve Einthusan ID for ttNumber:", einthusan_id);
                     return;
                 }
             } catch (error) {
-                console.error("Error in getEinthusanIdByTitle:", error.message);
+                //console.error("Error in getEinthusanIdByTitle:", error.message);
                 return;
             }
         }
@@ -670,13 +667,12 @@ async function meta(einthusan_id, lang) {
         const movieSummary = html.querySelector("#UIMovieSummary")?.querySelector("li");
         if (!movieSummary) throw new Error("Movie summary element not found");
 
-        // Extract relevant metadata
+        // Extract metadata elements
         const imgElement = movieSummary.querySelector("div.block1 a img");
         const infoElement = movieSummary.querySelector("div.info p");
         const titleElement = movieSummary.querySelector("a.title h3");
         const synopsisElement = movieSummary.querySelector("p.synopsis");
         const idElement = movieSummary.querySelector("a.title");
-        const castElements = html.querySelectorAll("div.prof p");
         const trailerElement = html.querySelectorAll("div.extras a")[1];
 
         if (!imgElement || !infoElement || !titleElement || !idElement || !synopsisElement) {
@@ -689,27 +685,42 @@ async function meta(einthusan_id, lang) {
         const description = decodeHtmlEntities(synopsisElement.rawText.trim());
         const einthusanId = idElement.rawAttributes?.href.split('/')[3];
         const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
-        const actors = Array.from(castElements).map(actor => actor.rawText.trim());
-        
+
+        // Extract cast and roles
+        const castAndRoles = Array.from(html.querySelectorAll("div.prof")).map(prof => {
+            const name = prof.querySelector("p")?.rawText.trim();
+            const role = prof.querySelector("label")?.rawText.trim();
+            return name && role ? { name, role } : null;
+        }).filter(Boolean);
+
+        const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name);
+        const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name);
+
         // Construct metadata object
         const metaObj = {
             id: `einthusan_${einthusan_id}`,
             EinthusanID: einthusanId,
             name: title,
-            cast: actors,
             description,
             poster: img.startsWith('http') ? img : `https:${img}`,
             background: img.startsWith('http') ? img : `https:${img}`,
             releaseInfo: year,
-            posterShape: 'poster',
             trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
-            links: [...actors.map(actor => ({
-                name: actor,
-                category: "Cast",
-                url: `stremio:///search?search=${encodeURIComponent(actor)}`
-            })),],
             type: "movie",
+            links: [
+                ...actors.map(actor => ({
+                    name: actor,
+                    category: "Cast",
+                    url: `stremio:///search?search=${encodeURIComponent(actor)}`
+                })),
+                ...directors.map(director => ({
+                    name: director,
+                    category: "Directors",
+                    url: `stremio:///search?search=${encodeURIComponent(director)}`
+                })),
+            ]
         };
+
         cache.set(einthusan_id, metaObj);
         return metaObj;
     } catch (e) {
@@ -717,6 +728,7 @@ async function meta(einthusan_id, lang) {
         throw e; // Re-throw the error for upstream handling
     }
 }
+
 
 module.exports = {
     search,
