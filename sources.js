@@ -306,6 +306,7 @@ async function stream(einthusan_id, lang) {
     const imdb = einthusan_id;
     const cacheKey = `stream_${einthusan_id}_${lang}`;
     const cached = cache.get(cacheKey);
+
     if (cached) {
         const cachedResult = decompressData(cached);
         const cachedTitle = cachedResult.streams[0].title;
@@ -314,11 +315,13 @@ async function stream(einthusan_id, lang) {
     }
 
     try {
-        // Handle einthusan_id starting with "einthusan_"
+        let title;
+        let validEinthusanId = false;
+
+        // Handle the "einthusan_" prefixed ID directly
         if (einthusan_id.startsWith("einthusan_")) {
             const strippedId = einthusan_id.replace("einthusan_", ""); // Strip the prefix
             const url = `${config.BaseURL}/movie/watch/${strippedId}/`;
-            //console.log(`Fetching stream directly from URL: ${url}`);
 
             const response = await requestQueue.add(() => client.get(url));
             const $ = cheerio.load(response.data);
@@ -326,11 +329,19 @@ async function stream(einthusan_id, lang) {
             const videoSection = $('#UIVideoPlayer');
             if (!videoSection.length) throw new Error("Video player section not found");
 
-            const title = videoSection.attr("data-content-title");
+            title = videoSection.attr("data-content-title");
             const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
             const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
 
             if (!mp4Link) throw new Error("No video source found");
+
+            // Check if the language is actually valid for this einthusan_id
+            const languageCheck = $('#UIMovieSummary div.info p span').text().toLowerCase();
+            if (!languageCheck.includes(lang.toLowerCase())) {
+                throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
+            }
+
+            validEinthusanId = true; // Set this to true if the language matches
 
             const capitalizedLang = capitalizeFirstLetter(lang);
             const result = {
@@ -342,56 +353,74 @@ async function stream(einthusan_id, lang) {
             };
 
             console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
+            
+            // Cache the result for the specific combination of einthusan_id and lang
             cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
             return result;
         }
 
-        // Handle ttnumber (starting with "tt")
+        // Handle ttnumber (starting with "tt") only if the einthusan_id starts with "tt"
         if (einthusan_id.startsWith("tt")) {
-            const title = await ttnumberToTitle(einthusan_id);
-            if (!title) return;
-            einthusan_id = await getEinthusanIdByTitle(title, lang, einthusan_id);
+            const imdbTitle = await ttnumberToTitle(einthusan_id);
+            if (!imdbTitle) return;
+
+            // Get Einthusan ID for this title and language
+            einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
 
             // Check if einthusan_id is undefined
             if (typeof einthusan_id === 'undefined') {
-                throw new Error(`Einthusan ID could not be retrieved for Title: ${title} in Language: ${capitalizeFirstLetter(lang)}`);
+                throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
             }
+
+            const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
+            const response = await requestQueue.add(() => client.get(url));
+            const $ = cheerio.load(response.data);
+
+            const videoSection = $('#UIVideoPlayer');
+            if (!videoSection.length) throw new Error("Video player section not found");
+
+            title = videoSection.attr("data-content-title");
+            const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
+            const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
+
+            if (!mp4Link) throw new Error("No video source found");
+
+            // Check if the language is valid for the current einthusan_id
+            const languageCheck = $('#UIMovieSummary div.info p').text().toLowerCase();
+            if (!languageCheck.includes(lang.toLowerCase())) {
+                throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
+            }
+
+            validEinthusanId = true; // Set this to true if the language matches
+
+            const capitalizedLang = capitalizeFirstLetter(lang);
+            const result = {
+                streams: [{
+                    url: mp4Link,
+                    name: `Einthusan ⚡️`,
+                    title: `🍿 ${title} (${year})\n🌐 ${capitalizedLang}`
+                }]
+            };
+
+            // Log success with color
+            console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
+
+            // Cache result for the specific combination of einthusan_id and lang
+            cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
+            return result;
         }
 
-        const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-        //console.log(`Fetching stream from URL: ${url}`);
-        const response = await requestQueue.add(() => client.get(url));
-        const $ = cheerio.load(response.data);
-
-        const videoSection = $('#UIVideoPlayer');
-        if (!videoSection.length) throw new Error("Video player section not found");
-
-        const title = videoSection.attr("data-content-title");
-        const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
-        const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
-
-        if (!mp4Link) throw new Error("No video source found");
-
-        const capitalizedLang = capitalizeFirstLetter(lang);
-        const result = {
-            streams: [{
-                url: mp4Link,
-                name: `Einthusan ⚡️`,
-                title: `🍿 ${title} (${year})\n🌐 ${capitalizedLang}`
-            }]
-        };
-
-        console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
-        cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
-        return result;
     } catch (err) {
         // Handle specific and general errors
-        if (err.message.includes("Einthusan ID could not be retrieved")) {
+        if (err.message.includes("Einthusan ID could not be retrieved") || err.message.includes("is not valid for the language")) {
+            // Handle specific case
         } else {
             console.error("Error in Stream Function:", err.message);
         }
     }
 }
+
+
 
 
 // Optimized search function with batch processing
