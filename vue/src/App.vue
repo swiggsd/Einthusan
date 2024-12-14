@@ -85,15 +85,16 @@
                         <div class="items-center mt-5 description">
                             <h2 class="font-semibold text-lg mr-auto">Extra Features:</h2>
                             <ul>
-                                <li>Recent Movies Catalog Show</li>
+                                <li>Show Recently Added Movies Catalog</li>
                             </ul>
                         </div>
-
-                        <div class="flex items-center justify-center space-x-2 mt-10">
-                            <span class="h-px w-full bg-gray-200"></span>
+                       
+                        <div class="items-center mt-5 description">
+                            <h2 class="font-semibold text-lg mr-auto">Note:</h2>
+                            <ul>
+                                <li>To use multiple languages, simply re-add the addon with each desired language.</li>
+                            </ul>
                         </div>
-
-
                         <div class="mt-5">
                             <label for="Input"
                                 class="mb-2 text-sm font-medium text-gray-900 sr-only dark:text-gray-300">Search
@@ -107,7 +108,7 @@
                                 </select>
                             </div>
                         </div>
-
+                      
                         <div class="flex items-center justify-center space-x-2 mt-10">
                             <span class="h-px w-full bg-gray-200"></span>
                         </div>

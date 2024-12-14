@@ -148,7 +148,8 @@ async function getImdbId(title, year) {
         return null;
     }
     // Remove the year and any additional text (e.g., "Film") after the year from the title
-    const cleanedTitle = title.replace(/\s?\(\d{4}(?:\s+[A-Za-z]+)*\)$/, '').replace(/\s?\d{4}(\s+[A-Za-z]+)*$/, '').replace(/#/g, '').trim();
+    const cleanedTitle = title.replace(/\s?\(.*?\)$/, '').replace(/#/g, '').trim();
+
     // Convert year to a number if it is provided
     if (year !== undefined) {
         year = Number(year); // Convert to number
@@ -173,7 +174,7 @@ async function getImdbId(title, year) {
             cache.set(cacheKey, compressData(result));
             return result;  // Return the result immediately after caching
         }
-        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Cleaned Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Orignal Title: ${useColors ? '\x1b[36m' : ''}"${title}"${useColors ? '\x1b[0m' : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
+        console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Cleaned Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${cleanedTitle !== title ? `${useColors ? '\x1b[33m' : ''} Original Title: ${useColors ? '\x1b[36m' : ''}"${title}"${useColors ? '\x1b[0m' : ''}` : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error Fetching IMDb ID For "${cleanedTitle}":`, err.message);
@@ -182,109 +183,124 @@ async function getImdbId(title, year) {
 }
 
 
-// Optimized title fetching from IMDb
+// Create a promise cache
+const promiseCache = new Map();
+
 async function ttnumberToTitle(ttNumber) {
-    // Regular expression to validate the IMDb ID format (7 or 8 digits)
     const ttNumberRegex = /^tt\d{7,8}$/;
 
-    // Validate the ttNumber
     if (!ttNumberRegex.test(ttNumber)) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
     }
-    // Step 1: Generate cache keys for the IMDb ID and country check
+
     const cacheKey = `title_${ttNumber}`;
     const countryCacheKey = `country_${ttNumber}`;
-    
-    // Check if the title is already cached
-    const cachedTitle = cache.get(cacheKey);
-    const cachedCountry = cache.get(countryCacheKey);
-    
-    if (cachedTitle) {
-        const title = decompressData(cachedTitle); // Decompress the cached title
-        //console.log(`Cache hit for title "${title}" of IMDb ID: ${ttNumber}`);
-        return title; // Return cached title
+
+    // Check if a request for this `ttNumber` is already in progress
+    if (promiseCache.has(ttNumber)) {
+        //console.info(`${useColors ? '\x1b[33m' : ''}Promise cache hit for IMDb ID: ${ttNumber}. Waiting for ongoing request.${useColors ? '\x1b[0m' : ''}`);
+        return promiseCache.get(ttNumber); // Return the existing promise
     }
 
-    // If the country check is cached, use it
+    // Check the cache for title or country information
+    const cachedTitle = cache.get(cacheKey);
+    if (cachedTitle) {
+        const title = decompressData(cachedTitle);
+        //console.info(`${useColors ? '\x1b[32m' : ''}Cache hit for title: "${title}" of IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
+        return title;
+    }
+
+    const cachedCountry = cache.get(countryCacheKey);
     if (cachedCountry) {
-        
         const { isIndian, title } = decompressData(cachedCountry);
-        //console.log(`Cache hit for country check of IMDb ID: ${ttNumber} Title: ${title}`);
+        //console.info(`${useColors ? '\x1b[33m' : ''}Cache hit for country check of IMDb ID: ${ttNumber}. Title: "${title}", IsIndian: ${isIndian}${useColors ? '\x1b[0m' : ''}`);
         if (isIndian) {
-            console.info(`Returning Cached Title for Indian movie: "${title}"`);
+            console.info(`${useColors ? '\x1b[36m' : ''}Returning cached title for Indian movie: "${title}"${useColors ? '\x1b[0m' : ''}`);
             return title;
         } else {
-            console.info(`Cached Result: Movie: ${title} (IMDb ID: ${ttNumber}) Is Not From India. Skipping.`);
-            return null; // If the country is not India, return null
+            //console.info(`${useColors ? '\x1b[31m' : ''}Cached result: IMDb ID: ${ttNumber}, Movie: "${title}" is not from India.${useColors ? '\x1b[0m' : ''}`);
+            return null;
         }
     }
 
-    let title = null; // Initialize title variable
-
-    try {
-        // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
-        const omdbApiKey = process.env.OMDB_API_KEY; // Access the API key from environment variables
-        if (!omdbApiKey) {
-            console.error("OMDB API Key Is Missing In Environment Variable.");
-            return null; // If API key is not found, return null
-        }
-
-        const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
-        const response = await axios.get(omdbUrl, { timeout: 5000 });
-
-        // Step 3: Check if the Country is "India"
-        const movieData = response.data;
-        const countryOfOrigin = movieData.Country; // The country of origin is in the 'Country' field
-        const movieTitle = movieData.Title; // Movie title from OMDB response
-        
-        // Determine if the movie is from India
-        const isIndian = countryOfOrigin && countryOfOrigin.includes('India');
-        const countryCheckResult = { isIndian, title: movieTitle };
-
-        // Cache the country check result
-        cache.set(countryCacheKey, compressData(countryCheckResult));
-
-        if (!isIndian) {
-            console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is Not From India. Skipping.`);
-            return null; // If the country is not India, return null or handle it as needed
-        }
-
-        // Step 4: Country is India, return the title from OMDB
-        console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is From India. Continuing.`);
-        
-        // Step 5: Cache the title
-        cache.set(cacheKey, compressData(movieTitle));
-        return movieTitle; // Return the title directly from OMDB response
-
-    } catch (err) {
-        // Step 6: Error handling for OMDB API
-        console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
-        
-        // Failsafe logic: Fetch title from IMDb suggestions API
-        console.info(`${useColors ? '\x1b[33m' : ''}Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: \x1b[0m${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}.`);
-        
+    // Create a new promise for this `ttNumber` and store it in the promise cache
+    const fetchPromise = (async () => {
         try {
-            const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
-            
-            // Extract the title from the response
-            const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-            title = movie ? movie.l : null;
-            
-            if (title) {
-                console.info(`${useColors ? '\x1b[33m' : ''}Fetched Title: "\x1b[0m${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}" For IMDb ID: \x1b[0m${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}`);
-                // Step 5: Cache the title
-                cache.set(cacheKey, compressData(title));
-            } else {
-                console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
+            const omdbApiKey = process.env.OMDB_API_KEY;
+            if (!omdbApiKey) {
+                console.error(`${useColors ? '\x1b[31m' : ''}OMDB API Key is missing in environment variables.${useColors ? '\x1b[0m' : ''}`);
+                return null;
             }
-            return title; // Return the title or null if not found
-        } catch (imdbErr) {
-            console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, imdbErr.message);
-            return null; // Return null if both API calls fail
+
+            const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
+            //console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from OMDB API for IMDb ID: ${ttNumber}. URL: ${omdbUrl}${useColors ? '\x1b[0m' : ''}`);
+
+            const response = await axios.get(omdbUrl, { timeout: 5000 });
+            const movieData = response.data;
+            const countryOfOrigin = movieData.Country;
+            const movieTitle = movieData.Title;
+            const isIndian = countryOfOrigin && countryOfOrigin.includes('India');
+            const countryCheckResult = { isIndian, title: movieTitle };
+
+            //console.info(`${useColors ? '\x1b[32m' : ''}OMDB API response for IMDb ID: ${ttNumber} - Title: "${movieTitle}", Country: "${countryOfOrigin}"${useColors ? '\x1b[0m' : ''}`);
+
+            // Cache the country check result
+            cache.set(countryCacheKey, compressData(countryCheckResult));
+            //console.info(`${useColors ? '\x1b[36m' : ''}Cached country check for IMDb ID: ${ttNumber}. IsIndian: ${isIndian}${useColors ? '\x1b[0m' : ''}`);
+
+            if (!isIndian) {
+                console.info(`${useColors ? '\x1b[31m' : ''}Movie: "${movieTitle}" (IMDb ID: ${ttNumber}) is not from India. Skipping.${useColors ? '\x1b[0m' : ''}`);
+                return null;
+            }
+
+            // Step 4: Country is India, return the title from OMDB
+            console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is From India. Continuing.`);
+
+            // Cache the title
+            cache.set(cacheKey, compressData(movieTitle));
+            //console.info(`${useColors ? '\x1b[36m' : ''}Cached title for IMDb ID: ${ttNumber}. Title: "${movieTitle}"${useColors ? '\x1b[0m' : ''}`);
+            return movieTitle;
+        } catch (err) {
+            console.error(`${useColors ? '\x1b[31m' : ''}Error fetching movie data from OMDB API for IMDb ID: ${ttNumber}. Error message: ${err.message}${useColors ? '\x1b[0m' : ''}`);
+
+            // Attempt fallback to IMDb suggestions API
+            console.info(`${useColors ? '\x1b[33m' : ''}Attempting to fetch title from IMDb Suggestions API for IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
+            try {
+                const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+                console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from IMDb Suggestions API for IMDb ID: ${ttNumber}. URL: ${imdbApiUrl}${useColors ? '\x1b[0m' : ''}`);
+
+                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+                const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
+                const title = movie ? movie.l : null;
+
+                if (title) {
+                    console.info(`${useColors ? '\x1b[33m' : ''}Fetched title from IMDb Suggestions API: "${title}" for IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
+                    cache.set(cacheKey, compressData(title));
+                    console.info(`${useColors ? '\x1b[36m' : ''}Cached title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Title: "${title}"${useColors ? '\x1b[0m' : ''}`);
+                } else {
+                    console.info(`${useColors ? '\x1b[31m' : ''}No title found for IMDb ID: ${ttNumber} in IMDb Suggestions API.${useColors ? '\x1b[0m' : ''}`);
+                }
+
+                return title;
+            } catch (imdbErr) {
+                console.error(`${useColors ? '\x1b[31m' : ''}Error fetching title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Error message: ${imdbErr.message}${useColors ? '\x1b[0m' : ''}`);
+                return null;
+            }
         }
-    }
+    })();
+
+    // Store the promise in the cache
+    promiseCache.set(ttNumber, fetchPromise);
+
+    // Remove the promise from the cache once it resolves or rejects
+    fetchPromise.finally(() => {
+        //console.info(`${useColors ? '\x1b[33m' : ''}Removing completed promise for IMDb ID: ${ttNumber} from cache.${useColors ? '\x1b[0m' : ''}`);
+        promiseCache.delete(ttNumber);
+    });
+
+    return fetchPromise;
 }
+
 
 
 // Optimized IP replacement
@@ -422,24 +438,33 @@ async function stream(einthusan_id, lang) {
 
 
 
-
-// Optimized search function with batch processing
 async function search(lang, slug) {
-    // Check if lang is undefined
-    if (typeof lang === 'undefined') {
-        console.error("Error: 'lang' parameter is undefined.");
-        return; // Exit the function early
+    if (typeof lang === 'undefined' || typeof slug === 'undefined') {
+        console.error("Error: 'lang' or 'slug' parameter is undefined.");
+        return null;
     }
 
     try {
-        //console.info(`Searching For: ${slug} In Language: ${lang}`);
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
+        //console.info(`Searching for '${slug}' in language '${lang}' using URL: ${url}`);
+
         const results = await getcatalogresults(url);
-        return results; // Return the search results directly without caching
+
+        // Dynamically update 'id' inline
+        const updatedResults = results.map(item => ({
+            ...item,
+            id: `einthusan_${item.EinthusanID}`, // Update 'id' field
+        }));
+
+        //console.log("Updated search results:", updatedResults);
+        return updatedResults; // Return updated results
     } catch (err) {
-        console.error("Error in Search Function:", err.message);
+        console.error("Error in search function:", err.message, { lang, slug });
+        return null;
     }
 }
+
+
 
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
