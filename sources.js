@@ -235,7 +235,7 @@ async function ttnumberToTitle(ttNumber) {
             const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
             //console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from OMDB API for IMDb ID: ${ttNumber}. URL: ${omdbUrl}${useColors ? '\x1b[0m' : ''}`);
 
-            const response = await axios.get(omdbUrl, { timeout: 5000 });
+            const response = await axios.get(omdbUrl, { timeout: 10000 });
             const movieData = response.data;
             const countryOfOrigin = movieData.Country;
             const movieTitle = movieData.Title;
@@ -269,7 +269,7 @@ async function ttnumberToTitle(ttNumber) {
                 const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
                 console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from IMDb Suggestions API for IMDb ID: ${ttNumber}. URL: ${imdbApiUrl}${useColors ? '\x1b[0m' : ''}`);
 
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
                 const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
                 const title = movie ? movie.l : null;
 
@@ -379,10 +379,8 @@ async function stream(einthusan_id, lang) {
         if (einthusan_id.startsWith("tt")) {
             const imdbTitle = await ttnumberToTitle(einthusan_id);
             if (!imdbTitle) return;
-
             // Get Einthusan ID for this title and language
             einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
-
             // Check if einthusan_id is undefined
             if (typeof einthusan_id === 'undefined') {
                 throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
@@ -439,25 +437,19 @@ async function stream(einthusan_id, lang) {
 
 
 async function search(lang, slug) {
-    if (typeof lang === 'undefined' || typeof slug === 'undefined') {
-        console.error("Error: 'lang' or 'slug' parameter is undefined.");
+    if (!lang || !slug) {
+        console.error("Error: Missing 'lang' or 'slug' parameter.");
         return null;
     }
 
     try {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
-        //console.info(`Searching for '${slug}' in language '${lang}' using URL: ${url}`);
-
         const results = await getcatalogresults(url);
 
-        // Dynamically update 'id' inline
-        const updatedResults = results.map(item => ({
+        return results.map(item => ({
             ...item,
-            id: `einthusan_${item.EinthusanID}`, // Update 'id' field
+            id: `einthusan_${item.EinthusanID}` // Dynamically update 'id'
         }));
-
-        //console.log("Updated search results:", updatedResults);
-        return updatedResults; // Return updated results
     } catch (err) {
         console.error("Error in search function:", err.message, { lang, slug });
         return null;
@@ -474,7 +466,7 @@ async function getcatalogresults(url) {
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
 
         // Process results in batches for better performance
-        const batchSize = 5;
+        const batchSize = 10;
         const resultsArray = [];
         
         for (let i = 0; i < searchResults.length; i += batchSize) {
@@ -691,6 +683,7 @@ process.on('unhandledRejection', (err) => {
 
 async function meta(einthusan_id, lang) {
     try {
+        const originalId = einthusan_id;
         if (einthusan_id.startsWith("tt")) {
             // Call the getEinthusanIdByTitle function to get the Einthusan ID
             try {
@@ -711,8 +704,18 @@ async function meta(einthusan_id, lang) {
         if (einthusan_id.startsWith("einthusan_")) {
             einthusan_id = einthusan_id.replace("einthusan_", "");
         }
-        const cachedMeta = cache.get(einthusan_id);
-        if (cachedMeta) return cachedMeta;
+        const cacheKey = einthusan_id.startsWith("tt")
+            ? `tt_${einthusan_id}` // For ttnumber, use tt_<ttnumber>
+            : `einthusan_${einthusan_id}`;
+        
+            const cachedMeta = cache.get(cacheKey);
+
+            if (cachedMeta) {
+                // Dynamically set the ID based on the current input
+                const updatedMeta = { ...cachedMeta };  // Clone the cached object to avoid mutation issues
+                updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
+                return updatedMeta;
+            }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         const response = await requestQueue.add(() => client.get(url));
@@ -749,10 +752,9 @@ async function meta(einthusan_id, lang) {
 
         const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name);
         const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name);
-
         // Construct metadata object
         const metaObj = {
-            id: `einthusan_${einthusan_id}`,
+            id: originalId,
             EinthusanID: einthusanId,
             name: title,
             description,
@@ -775,7 +777,7 @@ async function meta(einthusan_id, lang) {
             ]
         };
 
-        cache.set(einthusan_id, metaObj);
+        cache.set(cacheKey, metaObj);
         return metaObj;
     } catch (e) {
         console.error("Error in meta function:", e);
