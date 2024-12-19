@@ -138,6 +138,48 @@ class RequestQueue {
     }
 }
 
+async function verifyImdbTitle(title, year) {
+    try {
+        const imdbId = await getImdbId(title, year);
+        if (!imdbId) return false;
+
+        const fetchedTitle = await ttnumberToTitle(imdbId);
+        if (!fetchedTitle) return false;
+
+        // Extract the first word from both titles
+        const inputFirstWord = title.split(/\s+/)[0].toLowerCase();
+        const fetchedFirstWord = fetchedTitle.split(/\s+/)[0].toLowerCase();
+
+        // Check if the first words match exactly
+        if (inputFirstWord === fetchedFirstWord) {
+            //console.info(`Match Found: The title "${title}" matches the fetched title "${fetchedTitle}" for IMDb ID "${imdbId}".`);
+            return imdbId; // Return IMDb ID if the first words match
+        }
+
+        // If the first words are different but we want to avoid false positives, we can further refine the logic
+        // Example: Don't match numbers with words or completely different titles.
+        if (inputFirstWord === fetchedFirstWord || 
+            (isNaN(inputFirstWord) && isNaN(fetchedFirstWord) && inputFirstWord.toLowerCase().startsWith(fetchedFirstWord)) || 
+            (inputFirstWord.toLowerCase() === fetchedFirstWord.toLowerCase())) {
+            console.warn(`Relaxed Match: The title "${title}" does not perfectly match the fetched title "${fetchedTitle}" but the first words align based on starting letter. Accepting as a match.`);
+            return imdbId;// Adjusted to reject false positives more effectively
+        }
+
+        // If no match found
+        return null;
+    } catch (err) {
+        console.error(`Error in verifyImdbTitle: ${err.message}`);
+        return null; // Return null if there is an error
+    }
+}
+
+
+
+
+
+
+
+
 const requestQueue = new RequestQueue();
 
 // Optimized IMDb ID fetching
@@ -194,33 +236,17 @@ async function ttnumberToTitle(ttNumber) {
     }
 
     const cacheKey = `title_${ttNumber}`;
-    const countryCacheKey = `country_${ttNumber}`;
 
     // Check if a request for this `ttNumber` is already in progress
     if (promiseCache.has(ttNumber)) {
-        //console.info(`${useColors ? '\x1b[33m' : ''}Promise cache hit for IMDb ID: ${ttNumber}. Waiting for ongoing request.${useColors ? '\x1b[0m' : ''}`);
         return promiseCache.get(ttNumber); // Return the existing promise
     }
 
-    // Check the cache for title or country information
+    // Check the cache for title information
     const cachedTitle = cache.get(cacheKey);
     if (cachedTitle) {
         const title = decompressData(cachedTitle);
-        //console.info(`${useColors ? '\x1b[32m' : ''}Cache hit for title: "${title}" of IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
         return title;
-    }
-
-    const cachedCountry = cache.get(countryCacheKey);
-    if (cachedCountry) {
-        const { isIndian, title } = decompressData(cachedCountry);
-        //console.info(`${useColors ? '\x1b[33m' : ''}Cache hit for country check of IMDb ID: ${ttNumber}. Title: "${title}", IsIndian: ${isIndian}${useColors ? '\x1b[0m' : ''}`);
-        if (isIndian) {
-            console.info(`${useColors ? '\x1b[36m' : ''}Returning cached title for Indian movie: "${title}"${useColors ? '\x1b[0m' : ''}`);
-            return title;
-        } else {
-            //console.info(`${useColors ? '\x1b[31m' : ''}Cached result: IMDb ID: ${ttNumber}, Movie: "${title}" is not from India.${useColors ? '\x1b[0m' : ''}`);
-            return null;
-        }
     }
 
     // Create a new promise for this `ttNumber` and store it in the promise cache
@@ -228,62 +254,41 @@ async function ttnumberToTitle(ttNumber) {
         try {
             const omdbApiKey = process.env.OMDB_API_KEY;
             if (!omdbApiKey) {
-                console.error(`${useColors ? '\x1b[31m' : ''}OMDB API Key is missing in environment variables.${useColors ? '\x1b[0m' : ''}`);
+                console.error('OMDB API Key is missing in environment variables.');
                 return null;
             }
 
             const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
-            //console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from OMDB API for IMDb ID: ${ttNumber}. URL: ${omdbUrl}${useColors ? '\x1b[0m' : ''}`);
-
             const response = await axios.get(omdbUrl, { timeout: 10000 });
-            const movieData = response.data;
-            const countryOfOrigin = movieData.Country;
-            const movieTitle = movieData.Title;
-            const isIndian = countryOfOrigin && countryOfOrigin.includes('India');
-            const countryCheckResult = { isIndian, title: movieTitle };
+            const movieTitle = response.data.Title;
 
-            //console.info(`${useColors ? '\x1b[32m' : ''}OMDB API response for IMDb ID: ${ttNumber} - Title: "${movieTitle}", Country: "${countryOfOrigin}"${useColors ? '\x1b[0m' : ''}`);
-
-            // Cache the country check result
-            cache.set(countryCacheKey, compressData(countryCheckResult));
-            //console.info(`${useColors ? '\x1b[36m' : ''}Cached country check for IMDb ID: ${ttNumber}. IsIndian: ${isIndian}${useColors ? '\x1b[0m' : ''}`);
-
-            if (!isIndian) {
-                console.info(`${useColors ? '\x1b[31m' : ''}Movie: "${movieTitle}" (IMDb ID: ${ttNumber}) is not from India. Skipping.${useColors ? '\x1b[0m' : ''}`);
+            if (!movieTitle) {
+                console.error(`No title found for IMDb ID: ${ttNumber}.`);
                 return null;
             }
 
-            // Step 4: Country is India, return the title from OMDB
-            console.info(`Movie "${useColors ? '\x1b[36m' : ''}${movieTitle}${useColors ? '\x1b[0m' : ''}" (IMDb ID: ${useColors ? '\x1b[32m' : ''}${ttNumber}${useColors ? '\x1b[0m' : ''}) Is From India. Continuing.`);
-
             // Cache the title
             cache.set(cacheKey, compressData(movieTitle));
-            //console.info(`${useColors ? '\x1b[36m' : ''}Cached title for IMDb ID: ${ttNumber}. Title: "${movieTitle}"${useColors ? '\x1b[0m' : ''}`);
             return movieTitle;
         } catch (err) {
-            console.error(`${useColors ? '\x1b[31m' : ''}Error fetching movie data from OMDB API for IMDb ID: ${ttNumber}. Error message: ${err.message}${useColors ? '\x1b[0m' : ''}`);
+            console.error(`Error fetching movie data from OMDB API for IMDb ID: ${ttNumber}. Error message: ${err.message}`);
 
             // Attempt fallback to IMDb suggestions API
-            console.info(`${useColors ? '\x1b[33m' : ''}Attempting to fetch title from IMDb Suggestions API for IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
             try {
                 const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                console.info(`${useColors ? '\x1b[34m' : ''}Fetching data from IMDb Suggestions API for IMDb ID: ${ttNumber}. URL: ${imdbApiUrl}${useColors ? '\x1b[0m' : ''}`);
-
                 const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
                 const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
                 const title = movie ? movie.l : null;
 
                 if (title) {
-                    console.info(`${useColors ? '\x1b[33m' : ''}Fetched title from IMDb Suggestions API: "${title}" for IMDb ID: ${ttNumber}${useColors ? '\x1b[0m' : ''}`);
                     cache.set(cacheKey, compressData(title));
-                    console.info(`${useColors ? '\x1b[36m' : ''}Cached title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Title: "${title}"${useColors ? '\x1b[0m' : ''}`);
+                    return title;
                 } else {
-                    console.info(`${useColors ? '\x1b[31m' : ''}No title found for IMDb ID: ${ttNumber} in IMDb Suggestions API.${useColors ? '\x1b[0m' : ''}`);
+                    console.error(`No title found for IMDb ID: ${ttNumber} in IMDb Suggestions API.`);
+                    return null;
                 }
-
-                return title;
             } catch (imdbErr) {
-                console.error(`${useColors ? '\x1b[31m' : ''}Error fetching title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Error message: ${imdbErr.message}${useColors ? '\x1b[0m' : ''}`);
+                console.error(`Error fetching title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Error message: ${imdbErr.message}`);
                 return null;
             }
         }
@@ -294,12 +299,12 @@ async function ttnumberToTitle(ttNumber) {
 
     // Remove the promise from the cache once it resolves or rejects
     fetchPromise.finally(() => {
-        //console.info(`${useColors ? '\x1b[33m' : ''}Removing completed promise for IMDb ID: ${ttNumber} from cache.${useColors ? '\x1b[0m' : ''}`);
         promiseCache.delete(ttNumber);
     });
 
     return fetchPromise;
 }
+
 
 
 
@@ -446,10 +451,7 @@ async function search(lang, slug) {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
 
-        return results.map(item => ({
-            ...item,
-            id: `einthusan_${item.EinthusanID}` // Dynamically update 'id'
-        }));
+        return results;
     } catch (err) {
         console.error("Error in search function:", err.message, { lang, slug });
         return null;
@@ -468,7 +470,7 @@ async function getcatalogresults(url) {
         // Process results in batches for better performance
         const batchSize = 10;
         const resultsArray = [];
-        
+
         for (let i = 0; i < searchResults.length; i += batchSize) {
             const batch = searchResults.slice(i, i + batchSize);
             const batchPromises = batch.map(async (item) => {
@@ -486,9 +488,11 @@ async function getcatalogresults(url) {
 
                 if (!img || !year || !title || !einthusanId) return null;
 
-                const imdbId = await getImdbId(title, year);
+                // Fetch IMDb ID and verify the match
+                const imdbId = await verifyImdbTitle(title, year); 
+
                 return {
-                    id: imdbId || `einthusan_${einthusanId}`,
+                    id: imdbId || `einthusan_${einthusanId}`, // Use IMDb ID if verified, else fallback to Einthusan ID
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
@@ -509,6 +513,7 @@ async function getcatalogresults(url) {
         console.error("Error in GetCatalogResults Function:", err.message);
     }
 }
+
 
 // Optimized function to get Einthusan ID by title
 async function getEinthusanIdByTitle(title, lang, ttnumber) {
@@ -572,24 +577,20 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
 
     try {
         console.info(`${useColors ? '\x1b[33m' : ''}Fetching All Recent Movies For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''}, Max Pages: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
-        
-            const fetchPage = async (page, retries = 10) => {
+
+        const fetchPage = async (page, retries = 10) => {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
-                //console.info(`Fetching Page: ${pageUrl}`);
                 const response = await requestQueue.add(() => client.get(pageUrl));
-                
                 if (response.status === 200) {
-                    const body = response.data; // Adjust based on your response format
+                    const body = response.data;
                     if (body.includes('<title>Rate Limited - Einthusan</title>')) {
-                        //console.error(`Rate limited on page ${page}. Waiting for 5 seconds before retrying...`);
                         await sleep(5000); // Wait for 5 seconds
-                        return fetchPage(page, lang, retries); // Retry the same page
+                        return fetchPage(page, lang, retries);
                     }
                 }
 
-                // Check if response data is empty
                 if (!response.data || response.data.trim().length === 0) {
                     console.warn(`Empty response data for page ${page}.`);
                     return [];
@@ -618,9 +619,10 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
 
                         if (!img || !year || !title || !einthusanId) return null;
 
-                        const imdbId = await getImdbId(title, year);
-                        return {
-                            id: imdbId || `einthusan_${einthusanId}`,
+                        const imdbId = await verifyImdbTitle(title, year); 
+
+                    return {
+                            id: imdbId || `einthusan_${einthusanId}`, 
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
@@ -646,7 +648,6 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
             }
         };
 
-        // Fetch all pages
         const pagePromises = [];
         for (let i = 1; i <= maxPages; i++) {
             pagePromises.push(fetchPage(i));
@@ -655,7 +656,6 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
         const allPages = await Promise.all(pagePromises);
         const uniqueMovies = new Map();
 
-        // Merge results and remove duplicates
         allPages.flat().forEach(movie => {
             if (movie && !uniqueMovies.has(movie.EinthusanID)) {
                 uniqueMovies.set(movie.EinthusanID, movie);
@@ -667,8 +667,6 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
             console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${results.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
         }
 
-
-        // Cache final results for 12 hours with compression
         cache.set(cacheKey, compressData(results), 43200);
         return results;
     } catch (err) {
