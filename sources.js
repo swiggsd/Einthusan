@@ -283,12 +283,12 @@ async function ttnumberToTitle(ttNumber) {
             cache.set(countryCacheKey, compressData(countryCheckResult));
 
             if (!isNotUS) {
-                console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from the United States. Skipping.`);
+                //console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from the United States. Skipping.`);
                 return null; // If the country is the United States, return null
             }
 
             // Step 4: Country is not the United States, return the title from OMDB
-            console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From the United States. Continuing.`);
+            //console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From the United States. Continuing.`);
             
             // Step 5: Cache the title
             cache.set(cacheKey, compressData(movieTitle));
@@ -628,13 +628,19 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
 
                         const imdbId = await verifyImdbTitle(title, year); 
 
-                    return {
+                        // Fetch additional metadata using the existing meta function
+                        const metaData = await meta(`einthusan_${einthusanId}`, lang);
+
+                        return {
                             id: imdbId || `einthusan_${einthusanId}`, 
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
                             poster: img.startsWith('http') ? img : `https:${img}`,
-                            releaseInfo: year
+                            releaseInfo: year,
+                            description: metaData?.description || null,
+                            trailers: metaData?.trailers || [],
+                            links: metaData?.links || []
                         };
                     })
                 );
