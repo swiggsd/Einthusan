@@ -173,13 +173,6 @@ async function verifyImdbTitle(title, year) {
     }
 }
 
-
-
-
-
-
-
-
 const requestQueue = new RequestQueue();
 
 // Optimized IMDb ID fetching
@@ -224,29 +217,46 @@ async function getImdbId(title, year) {
     }
 }
 
-
 // Create a promise cache
 const promiseCache = new Map();
 
 async function ttnumberToTitle(ttNumber) {
+    // Regular expression to validate the IMDb ID format (7 or 8 digits)
     const ttNumberRegex = /^tt\d{7,8}$/;
 
+    // Validate the ttNumber
     if (!ttNumberRegex.test(ttNumber)) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
     }
 
+    // Step 1: Generate cache keys for the IMDb ID and country check
     const cacheKey = `title_${ttNumber}`;
-
+    const countryCacheKey = `country_${ttNumber}`;
+    
     // Check if a request for this `ttNumber` is already in progress
     if (promiseCache.has(ttNumber)) {
         return promiseCache.get(ttNumber); // Return the existing promise
     }
 
-    // Check the cache for title information
+    // Check the cache for title or country information
     const cachedTitle = cache.get(cacheKey);
+    const cachedCountry = cache.get(countryCacheKey);
+    
     if (cachedTitle) {
-        const title = decompressData(cachedTitle);
-        return title;
+        const title = decompressData(cachedTitle); // Decompress the cached title
+        return title; // Return cached title
+    }
+
+    // If the country check is cached, use it
+    if (cachedCountry) {
+        const { isNotUS, title } = decompressData(cachedCountry);
+        if (isNotUS) {
+            console.info(`Returning Cached Title for non-US movie: "${title}"`);
+            return title;
+        } else {
+            console.info(`Cached Result: Movie: "${title}" (IMDb ID: ${ttNumber}) Is From the United States. Skipping.`);
+            return null; // If the country is the United States, return null
+        }
     }
 
     // Create a new promise for this `ttNumber` and store it in the promise cache
@@ -258,45 +268,65 @@ async function ttnumberToTitle(ttNumber) {
                 return null;
             }
 
+            // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
             const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
-            const response = await axios.get(omdbUrl, { timeout: 10000 });
-            const movieTitle = response.data.Title;
+            const response = await axios.get(omdbUrl, { timeout: 5000 });
+            const movieData = response.data;
+            const countryOfOrigin = movieData.Country; // The country of origin is in the 'Country' field
+            const movieTitle = movieData.Title; // Movie title from OMDB response
+            
+            // Determine if the movie is from the United States
+            const isNotUS = !(countryOfOrigin && (countryOfOrigin.includes('United States') || countryOfOrigin.includes('USA')));
+            const countryCheckResult = { isNotUS, title: movieTitle };
 
-            if (!movieTitle) {
-                console.error(`No title found for IMDb ID: ${ttNumber}.`);
-                return null;
+            // Cache the country check result
+            cache.set(countryCacheKey, compressData(countryCheckResult));
+
+            if (!isNotUS) {
+                console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from the United States. Skipping.`);
+                return null; // If the country is the United States, return null
             }
 
-            // Cache the title
+            // Step 4: Country is not the United States, return the title from OMDB
+            console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From the United States. Continuing.`);
+            
+            // Step 5: Cache the title
             cache.set(cacheKey, compressData(movieTitle));
-            return movieTitle;
-        } catch (err) {
-            console.error(`Error fetching movie data from OMDB API for IMDb ID: ${ttNumber}. Error message: ${err.message}`);
+            return movieTitle; // Return the title directly from OMDB response
 
-            // Attempt fallback to IMDb suggestions API
+        } catch (err) {
+            // Step 6: Error handling for OMDB API
+            console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
+            
+            // Failsafe logic: Fetch title from IMDb suggestions API
+            console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
+            
             try {
                 const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
+                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+                
+                // Extract the title from the response
                 const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
                 const title = movie ? movie.l : null;
-
+                
                 if (title) {
+                    console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                    // Step 5: Cache the title
                     cache.set(cacheKey, compressData(title));
-                    return title;
                 } else {
-                    console.error(`No title found for IMDb ID: ${ttNumber} in IMDb Suggestions API.`);
-                    return null;
+                    console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
                 }
+                return title; // Return the title or null if not found
             } catch (imdbErr) {
-                console.error(`Error fetching title from IMDb Suggestions API for IMDb ID: ${ttNumber}. Error message: ${imdbErr.message}`);
-                return null;
+                console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, imdbErr.message);
+                return null; // Return null if both API calls fail
             }
         }
     })();
 
     // Store the promise in the cache
     promiseCache.set(ttNumber, fetchPromise);
-
+    
     // Remove the promise from the cache once it resolves or rejects
     fetchPromise.finally(() => {
         promiseCache.delete(ttNumber);
@@ -304,9 +334,6 @@ async function ttnumberToTitle(ttNumber) {
 
     return fetchPromise;
 }
-
-
-
 
 // Optimized IP replacement
 const replaceIpInLink = (link) => {
@@ -339,95 +366,75 @@ async function stream(einthusan_id, lang) {
         let title;
         let validEinthusanId = false;
 
-        // Handle the "einthusan_" prefixed ID directly
-        if (einthusan_id.startsWith("einthusan_")) {
-            const strippedId = einthusan_id.replace("einthusan_", ""); // Strip the prefix
-            const url = `${config.BaseURL}/movie/watch/${strippedId}/`;
-
-            const response = await requestQueue.add(() => client.get(url));
-            const $ = cheerio.load(response.data);
-
-            const videoSection = $('#UIVideoPlayer');
-            if (!videoSection.length) throw new Error("Video player section not found");
-
-            title = videoSection.attr("data-content-title");
-            const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
-            const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
-
-            if (!mp4Link) throw new Error("No video source found");
-
-            // Check if the language is actually valid for this einthusan_id
-            const languageCheck = $('#UIMovieSummary div.info p span').text().toLowerCase();
-            if (!languageCheck.includes(lang.toLowerCase())) {
-                throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
-            }
-
-            validEinthusanId = true; // Set this to true if the language matches
-
-            const capitalizedLang = capitalizeFirstLetter(lang);
-            const result = {
-                streams: [{
-                    url: mp4Link,
-                    name: `Einthusan ⚡️`,
-                    title: `🍿 ${title} (${year})\n🌐 ${capitalizedLang}`
-                }]
-            };
-
-            console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
-            
-            // Cache the result for the specific combination of einthusan_id and lang
-            cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
-            return result;
-        }
-
-        // Handle ttnumber (starting with "tt") only if the einthusan_id starts with "tt"
+        // Check if einthusan_id starts with "tt" (IMDB ID)
         if (einthusan_id.startsWith("tt")) {
-            const imdbTitle = await ttnumberToTitle(einthusan_id);
-            if (!imdbTitle) return;
-            // Get Einthusan ID for this title and language
-            einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
-            // Check if einthusan_id is undefined
-            if (typeof einthusan_id === 'undefined') {
-                throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
+            // Check the recent movies cache for a mapping of ttnumber to einthusan_id
+            const cacheKeyForMovies = `recent_movies_${lang}_15`; // Assuming the cache key for recent movies is valid
+            const cachedMovies = cache.get(cacheKeyForMovies);
+
+            let mappedEinthusanId;
+            if (cachedMovies) {
+                const movies = decompressData(cachedMovies);
+                // Look for the movie that matches the imdb ID (e.g., "tt10916120")
+                const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
+                if (movie) {
+                    mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
+                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                }
             }
 
-            const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-            const response = await requestQueue.add(() => client.get(url));
-            const $ = cheerio.load(response.data);
-
-            const videoSection = $('#UIVideoPlayer');
-            if (!videoSection.length) throw new Error("Video player section not found");
-
-            title = videoSection.attr("data-content-title");
-            const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
-            const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
-
-            if (!mp4Link) throw new Error("No video source found");
-
-            // Check if the language is valid for the current einthusan_id
-            const languageCheck = $('#UIMovieSummary div.info p').text().toLowerCase();
-            if (!languageCheck.includes(lang.toLowerCase())) {
-                throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
+            if (mappedEinthusanId) {
+                einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
+            } else {
+                // Fall back to the existing logic if no mapping found
+                const imdbTitle = await ttnumberToTitle(einthusan_id);
+                if (!imdbTitle) return;
+                // Get Einthusan ID for this title and language
+                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
+                if (typeof einthusan_id === 'undefined') {
+                    throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
+                }
             }
-
-            validEinthusanId = true; // Set this to true if the language matches
-
-            const capitalizedLang = capitalizeFirstLetter(lang);
-            const result = {
-                streams: [{
-                    url: mp4Link,
-                    name: `Einthusan ⚡️`,
-                    title: `🍿 ${title} (${year})\n🌐 ${capitalizedLang}`
-                }]
-            };
-
-            // Log success with color
-            console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
-
-            // Cache result for the specific combination of einthusan_id and lang
-            cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
-            return result;
+        } else {
+            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
+            einthusan_id = einthusan_id.replace("einthusan_", "");
+            //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
+        const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
+        const response = await requestQueue.add(() => client.get(url));
+        const $ = cheerio.load(response.data);
+
+        const videoSection = $('#UIVideoPlayer');
+        if (!videoSection.length) throw new Error("Video player section not found");
+
+        title = videoSection.attr("data-content-title");
+        const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
+        const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
+
+        if (!mp4Link) throw new Error("No video source found");
+
+        // Check if the language is valid for the current einthusan_id
+        const languageCheck = $('#UIMovieSummary div.info p').text().toLowerCase();
+        if (!languageCheck.includes(lang.toLowerCase())) {
+            throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
+        }
+
+        validEinthusanId = true; // Set this to true if the language matches
+
+        const capitalizedLang = capitalizeFirstLetter(lang);
+        const result = {
+            streams: [{
+                url: mp4Link,
+                name: `Einthusan ⚡️`,
+                title: `🍿 ${title} (${year})\n🌐 ${capitalizedLang}`
+            }]
+        };
+
+        console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
+
+        // Cache result for the specific combination of einthusan_id and lang
+        cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
+        return result;
 
     } catch (err) {
         // Handle specific and general errors
@@ -506,7 +513,7 @@ async function getcatalogresults(url) {
         }
 
         if (resultsArray.length) {
-            console.info(`${useColors ? '\x1b[32m' : ''}Searching For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}in Language:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[35m' : ''}${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}${useColors ? '\x1b[0m' : ''}`);
+            //console.info(`${useColors ? '\x1b[32m' : ''}Searching For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}in Language:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[35m' : ''}${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}${useColors ? '\x1b[0m' : ''}`);
         }
         return resultsArray;
     } catch (err) {
@@ -544,7 +551,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
                 return matchByTTNumber.EinthusanID;
             }
             // Move the error throw outside of the if statement
-            throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
+            //throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
         }
 
         // If no ttnumber is provided, proceed with the title search
@@ -682,38 +689,53 @@ process.on('unhandledRejection', (err) => {
 async function meta(einthusan_id, lang) {
     try {
         const originalId = einthusan_id;
+        let mappedEinthusanId;
+
         if (einthusan_id.startsWith("tt")) {
-            // Call the getEinthusanIdByTitle function to get the Einthusan ID
-            try {
-                const title = await ttnumberToTitle(einthusan_id);
-                if (!title) { return; }
-                const einthusanId = await getEinthusanIdByTitle(title, lang);
-                if (einthusanId) {
-                    einthusan_id = einthusanId;  // Update the einthusan_id with the retrieved value
-                } else {
-                   // console.error("Error: Unable to retrieve Einthusan ID for ttNumber:", einthusan_id);
-                    return;
+            // Check the recent movies cache for a mapping of ttnumber to einthusan_id
+            const cacheKeyForMovies = `recent_movies_${lang}_15`; // Assuming the cache key for recent movies is valid
+            const cachedMovies = cache.get(cacheKeyForMovies);
+
+            if (cachedMovies) {
+                const movies = decompressData(cachedMovies);
+                // Look for the movie that matches the imdb ID (e.g., "tt10916120")
+                const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
+                if (movie) {
+                    mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
+                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
-            } catch (error) {
-                //console.error("Error in getEinthusanIdByTitle:", error.message);
-                return;
             }
-        }
-        if (einthusan_id.startsWith("einthusan_")) {
+
+            if (mappedEinthusanId) {
+                einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
+            } else {
+                // Fall back to the existing logic if no mapping found
+                const imdbTitle = await ttnumberToTitle(einthusan_id);
+                if (!imdbTitle) return;
+                // Get Einthusan ID for this title and language
+                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
+                if (typeof einthusan_id === 'undefined') {
+                    throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
+                }
+            }
+        } else {
+            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
             einthusan_id = einthusan_id.replace("einthusan_", "");
+            //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
+
         const cacheKey = einthusan_id.startsWith("tt")
             ? `tt_${einthusan_id}` // For ttnumber, use tt_<ttnumber>
             : `einthusan_${einthusan_id}`;
         
-            const cachedMeta = cache.get(cacheKey);
+        const cachedMeta = cache.get(cacheKey);
 
-            if (cachedMeta) {
-                // Dynamically set the ID based on the current input
-                const updatedMeta = { ...cachedMeta };  // Clone the cached object to avoid mutation issues
-                updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
-                return updatedMeta;
-            }
+        if (cachedMeta) {
+            // Dynamically set the ID based on the current input
+            const updatedMeta = { ...cachedMeta };  // Clone the cached object to avoid mutation issues
+            updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
+            return updatedMeta;
+        }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         const response = await requestQueue.add(() => client.get(url));
@@ -739,7 +761,7 @@ async function meta(einthusan_id, lang) {
         const title = decodeHtmlEntities(titleElement.rawText.trim());
         const description = decodeHtmlEntities(synopsisElement.rawText.trim());
         const einthusanId = idElement.rawAttributes?.href.split('/')[3];
-        const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+        const trailer = trailerElement?.rawAttributes['href'] ?.split("v=")[1] || null;
 
         // Extract cast and roles
         const castAndRoles = Array.from(html.querySelectorAll("div.prof")).map(prof => {
@@ -778,8 +800,7 @@ async function meta(einthusan_id, lang) {
         cache.set(cacheKey, metaObj);
         return metaObj;
     } catch (e) {
-        console.error("Error in meta function:", e);
-        throw e; // Re-throw the error for upstream handling
+        //console.error("Error in meta function:", e.message);
     }
 }
 
