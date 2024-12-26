@@ -229,34 +229,20 @@ async function ttnumberToTitle(ttNumber) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
     }
 
-    // Step 1: Generate cache keys for the IMDb ID and country check
+    // Step 1: Generate cache keys for the IMDb ID
     const cacheKey = `title_${ttNumber}`;
-    const countryCacheKey = `country_${ttNumber}`;
     
     // Check if a request for this `ttNumber` is already in progress
     if (promiseCache.has(ttNumber)) {
         return promiseCache.get(ttNumber); // Return the existing promise
     }
 
-    // Check the cache for title or country information
+    // Check the cache for title information
     const cachedTitle = cache.get(cacheKey);
-    const cachedCountry = cache.get(countryCacheKey);
     
     if (cachedTitle) {
         const title = decompressData(cachedTitle); // Decompress the cached title
         return title; // Return cached title
-    }
-
-    // If the country check is cached, use it
-    if (cachedCountry) {
-        const { isNotUS, title } = decompressData(cachedCountry);
-        if (isNotUS) {
-            console.info(`Returning Cached Title for non-US movie: "${title}"`);
-            return title;
-        } else {
-            console.info(`Cached Result: Movie: "${title}" (IMDb ID: ${ttNumber}) Is From the United States. Skipping.`);
-            return null; // If the country is the United States, return null
-        }
     }
 
     // Create a new promise for this `ttNumber` and store it in the promise cache
@@ -272,23 +258,7 @@ async function ttnumberToTitle(ttNumber) {
             const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
             const response = await axios.get(omdbUrl, { timeout: 5000 });
             const movieData = response.data;
-            const countryOfOrigin = movieData.Country; // The country of origin is in the 'Country' field
             const movieTitle = movieData.Title; // Movie title from OMDB response
-            
-            // Determine if the movie is from the United States
-            const isNotUS = !(countryOfOrigin && (countryOfOrigin.includes('United States') || countryOfOrigin.includes('USA')));
-            const countryCheckResult = { isNotUS, title: movieTitle };
-
-            // Cache the country check result
-            cache.set(countryCacheKey, compressData(countryCheckResult));
-
-            if (!isNotUS) {
-                //console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) is from the United States. Skipping.`);
-                return null; // If the country is the United States, return null
-            }
-
-            // Step 4: Country is not the United States, return the title from OMDB
-            //console.info(`Movie "${movieTitle}" (IMDb ID: ${ttNumber}) Is Not From the United States. Continuing.`);
             
             // Step 5: Cache the title
             cache.set(cacheKey, compressData(movieTitle));
