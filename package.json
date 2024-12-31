@@ -13,9 +13,10 @@
 		"dotenv": "latest",
 		"express": "latest",
 		"express-rate-limit": "latest",
-		"node-html-parser": "latest",
 		"name-to-imdb": "latest",
 		"node-cache": "latest",
+		"node-html-parser": "latest",
+		"puppeteer": "latest",
 		"serve-index": "latest",
 		"stremio-addon-sdk": "latest",
 		"swagger-stats": "latest"

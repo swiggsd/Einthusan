@@ -1,6 +1,7 @@
 const { parse } = require("node-html-parser");
 const config = require('./config');
 require('dotenv').config();
+const puppeteer = require("puppeteer");
 const cheerio = require('cheerio');
 const axios = require('axios');
 const nameToImdb = require("name-to-imdb");
@@ -72,6 +73,60 @@ const client = axios.create({
     retries: 3,
     retryDelay: (retryCount) => retryCount * 1000
 });
+
+// Puppeteer login function to attach session to the global Axios client
+async function initializeClientWithSession() {
+    const browser = await puppeteer.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    });
+  
+    const page = await browser.newPage();
+    const email = process.env.LOGIN_EMAIL;
+    const password = process.env.LOGIN_PASSWORD;
+  
+    if (!email || !password) {
+      throw new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
+    }
+  
+    try {
+      await page.goto("https://einthusan.tv/login/", { waitUntil: "networkidle2" });
+      await page.evaluate(() => {
+        const agreeButton = [...document.querySelectorAll('button')].find(button => button.textContent.includes('AGREE'));
+        if (agreeButton) agreeButton.click();
+      });
+      await page.type("#login-email", email, { delay: 50 });
+      await page.type("#login-password", password, { delay: 50 });
+      await page.click("#login-submit");
+      await page.waitForSelector(".profile", { visible: true, timeout: 10000 });
+  
+      console.log("Login successful!");
+  
+      // Extract cookies and CSRF token
+      const cookies = await page.cookies();
+      const csrfToken = cookies.find(cookie => cookie.name === "_gorilla_csrf")?.value;
+      const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
+  
+      if (!csrfToken) {
+        throw new Error("CSRF token not found after login.");
+      }
+  
+      // Attach cookies and CSRF token to the global Axios client
+      client.defaults.headers.Cookie = cookieString;
+      client.defaults.headers["X-CSRF-Token"] = csrfToken;
+  
+      console.log("Global Axios client updated with login session.");
+  
+      // Close Puppeteer session
+      await browser.close();
+    } catch (error) {
+      console.error("Login failed:", error.message);
+      await browser.close();
+      throw error;
+    }
+  }
+
 
 // Add retry interceptor
 client.interceptors.response.use(undefined, async (err) => {
@@ -266,10 +321,10 @@ async function ttnumberToTitle(ttNumber) {
 
         } catch (err) {
             // Step 6: Error handling for OMDB API
-            console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
+            //console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
             
             // Failsafe logic: Fetch title from IMDb suggestions API
-            console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
+            //console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
             
             try {
                 const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
@@ -349,7 +404,7 @@ async function stream(einthusan_id, lang) {
                 const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
                 if (movie) {
                     mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
-                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
 
@@ -373,10 +428,8 @@ async function stream(einthusan_id, lang) {
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         const response = await requestQueue.add(() => client.get(url));
         const $ = cheerio.load(response.data);
-
         const videoSection = $('#UIVideoPlayer');
-        if (!videoSection.length) throw new Error("Video player section not found");
-
+        if (!videoSection.length) throw new Error(`Video player section not found using URL: ${url}`);
         title = videoSection.attr("data-content-title");
         const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
         const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
@@ -547,7 +600,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
     const cached = cache.get(cacheKey);
     if (cached) {
         if (logSummary) {
-            console.log(`${useColors ? '\x1b[32m' : ''}Cache Hit For Recent Movies:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}, ${useColors ? '\x1b[33m' : ''}Max Pages:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
+            //console.log(`${useColors ? '\x1b[32m' : ''}Cache Hit For Recent Movies:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}, ${useColors ? '\x1b[33m' : ''}Max Pages:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
         }
         return decompressData(cached);
     }
@@ -678,7 +731,7 @@ async function meta(einthusan_id, lang) {
                 const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
                 if (movie) {
                     mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
-                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
 
@@ -786,5 +839,6 @@ module.exports = {
     stream,
     getAllRecentMovies,
     fetchRecentMoviesForAllLanguages,
-    meta
+    meta,
+    initializeClientWithSession
 };

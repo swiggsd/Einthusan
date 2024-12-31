@@ -22,6 +22,16 @@ const globalLimiter = rateLimit({
 // Apply the rate limiter globally
 app.use(globalLimiter);
 
+// Check if both environment variables are defined
+if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
+    // Run the function immediately
+    sources.initializeClientWithSession();
+  
+    // Set the interval to run the function every 24 hours (86400000 milliseconds)
+    setInterval(sources.initializeClientWithSession, 86400000);
+  } else {
+    console.log('Environment variables LOGIN_EMAIL and LOGIN_PASSWORD are not defined.');
+  }
 // Schedule the fetch every 12 hours (43200000 milliseconds)
 setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
 // Initial fetch when the server starts
