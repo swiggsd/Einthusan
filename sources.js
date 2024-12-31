@@ -77,7 +77,7 @@ const client = axios.create({
 // Puppeteer login function to attach session to the global Axios client
 async function initializeClientWithSession() {
     const browser = await puppeteer.launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+      //executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     });
