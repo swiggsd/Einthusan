@@ -1,12 +1,13 @@
 const { parse } = require("node-html-parser");
 const config = require('./config');
 require('dotenv').config();
-const puppeteer = require("puppeteer");
 const cheerio = require('cheerio');
 const axios = require('axios');
 const nameToImdb = require("name-to-imdb");
 const NodeCache = require("node-cache");
 const { promisify } = require('util');
+const { wrapper } = require('axios-cookiejar-support');
+const { CookieJar } = require('tough-cookie');
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const zlib = require('zlib'); // Import zlib for compression
 const useColors = process.env.USE_COLORS === 'true' || false;
@@ -37,6 +38,7 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
         console.error("Error Fetching Movies For All Languages:", error);
     }
 };
+const jar = new CookieJar();
 
 // Render Refresh Start
 const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
@@ -59,74 +61,103 @@ const decompressData = (data) => {
     return JSON.parse(zlib.inflateSync(Buffer.from(data, 'base64')).toString());
 };
 // Create axios instance with optimized settings
-const client = axios.create({
-    baseURL: config.BaseURL,
+const client = wrapper(axios.create({
+    baseURL: config.BaseURL, // Replace with your base URL
     timeout: 1200000,
     headers: {
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive'
     },
     // Enable HTTP keep-alive
-    httpAgent: new (require('http').Agent)({ keepAlive: true }),
-    httpsAgent: new (require('https').Agent)({ keepAlive: true }),
+    //httpAgent: new (require('http').Agent)({ keepAlive: true }),
+    //httpsAgent: new (require('https').Agent)({ keepAlive: true }),
+    // Attach the cookie jar
+    jar,
+    withCredentials: true, // Ensure cookies are sent with requests
     // Implement retry logic
     retries: 3,
     retryDelay: (retryCount) => retryCount * 1000
-});
+}));
 
-// Puppeteer login function to attach session to the global Axios client
 async function initializeClientWithSession() {
-    const browser = await puppeteer.launch({
-      //executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-  
-    const page = await browser.newPage();
     const email = process.env.LOGIN_EMAIL;
     const password = process.env.LOGIN_PASSWORD;
-  
-    if (!email || !password) {
-      throw new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
-    }
-  
-    try {
-      await page.goto("https://einthusan.tv/login/", { waitUntil: "networkidle2" });
-      await page.evaluate(() => {
-        const agreeButton = [...document.querySelectorAll('button')].find(button => button.textContent.includes('AGREE'));
-        if (agreeButton) agreeButton.click();
-      });
-      await page.type("#login-email", email, { delay: 50 });
-      await page.type("#login-password", password, { delay: 50 });
-      await page.click("#login-submit");
-      await page.waitForSelector(".profile", { visible: true, timeout: 10000 });
-  
-      console.log("Login successful!");
-  
-      // Extract cookies and CSRF token
-      const cookies = await page.cookies();
-      const csrfToken = cookies.find(cookie => cookie.name === "_gorilla_csrf")?.value;
-      const cookieString = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join("; ");
-  
-      if (!csrfToken) {
-        throw new Error("CSRF token not found after login.");
-      }
-  
-      // Attach cookies and CSRF token to the global Axios client
-      client.defaults.headers.Cookie = cookieString;
-      client.defaults.headers["X-CSRF-Token"] = csrfToken;
-  
-      console.log("Global Axios client updated with login session.");
-  
-      // Close Puppeteer session
-      await browser.close();
-    } catch (error) {
-      console.error("Login failed:", error.message);
-      await browser.close();
-      throw error;
-    }
-  }
 
+    if (!email || !password) {
+        throw new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
+    }
+
+    try {
+        // Step 1: Fetch the login page
+        const loginUrl = "/login/";
+        const loginPageResponse = await client.get(loginUrl);
+
+        // Step 2: Extract the CSRF token
+        const $ = cheerio.load(loginPageResponse.data);
+        const csrfToken = $('html').attr('data-pageid');
+        if (!csrfToken) {
+            throw new Error('CSRF token not found in the login page.');
+        }
+        //console.log("CSRF token extracted:", csrfToken);
+
+        // Step 3: Prepare the login payload
+        const loginPayload = new URLSearchParams({
+            xEvent: 'Login',
+            xJson: JSON.stringify({ Email: email, Password: password }),
+            tabID: 'vwmSPyo0giMK9nETr0vMMrE/dIBvZQ6a11v+i2kVk6/t7UCLFWORSxePRTDTpRTAeuu/D/9t32a7lO3aJNo7EA==25',
+            'gorilla.csrf.Token': csrfToken,
+        });
+
+        // Step 4: Send login request
+        const ajaxLoginUrl = "/ajax/login/";
+        const loginResponse = await client.post(
+            ajaxLoginUrl,
+            loginPayload.toString(),
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Origin': 'https://einthusan.tv',
+                    'Referer': 'https://einthusan.tv/login/',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Add User-Agent
+                },
+            }
+        );
+
+        // Step 5: Handle the login response
+        //console.log("Login response:", loginResponse.data);
+        if (loginResponse.data.Event === 'redirect') {
+            //console.log("Login successful! Redirecting to:", loginResponse.data.Data);
+
+            // Step 6: Fetch the account page
+            const accountUrl = loginResponse.data.Data;
+            const accountResponse = await client.get(accountUrl);
+
+            // Step 7: Parse the account page HTML
+            const $account = cheerio.load(accountResponse.data);
+
+            // Step 8: Extract account details
+            const accountDetails = {
+                username: $account('div.profile div.header div div.quickinfo h2').text().trim(),
+                email: $account('div.profile div.header div div.quickinfo p.e-addr').text().trim(),
+                ipaddr: $account('.details div:contains("IP Addr") p').text().trim(),
+                location: $account('.details div:contains("Location") p').text().trim(),
+            };
+
+            console.log("Account details:", accountDetails);
+
+            // Resolve the promise to indicate successful login
+            return accountDetails;
+        } else {
+            // Reject the promise if login fails
+            throw new Error("Login failed: " + (loginResponse.data.message || "Unknown error"));
+        }
+    } catch (error) {
+        console.error("Login failed:", error.message);
+        // Reject the promise with the error
+        throw error;
+    }
+}
 
 // Add retry interceptor
 client.interceptors.response.use(undefined, async (err) => {
@@ -335,7 +366,7 @@ async function ttnumberToTitle(ttNumber) {
                 const title = movie ? movie.l : null;
                 
                 if (title) {
-                    console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                    //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
                     // Step 5: Cache the title
                     cache.set(cacheKey, compressData(title));
                 } else {

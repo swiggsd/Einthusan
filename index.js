@@ -22,20 +22,36 @@ const globalLimiter = rateLimit({
 // Apply the rate limiter globally
 app.use(globalLimiter);
 
-// Check if both environment variables are defined
 if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
-    // Run the function immediately
-    sources.initializeClientWithSession();
-  
-    // Set the interval to run the function every 24 hours (86400000 milliseconds)
+    // If login credentials are set, run the login function first
+    sources.initializeClientWithSession()
+        .then(() => {
+            console.log("Login successful. Starting initial fetch of recent movies.");
+            // Initial fetch when the server starts
+            sources.fetchRecentMoviesForAllLanguages();
+
+            // Schedule the fetch every 12 hours (43200000 milliseconds)
+            setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+        })
+        .catch((error) => {
+            console.error("Login failed. Running fetch directly:", error.message);
+            // Run fetchRecentMoviesForAllLanguages even if login fails
+            sources.fetchRecentMoviesForAllLanguages();
+
+            // Schedule the fetch every 12 hours (43200000 milliseconds)
+            setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+        });
+
+    // Schedule the login function to run every 24 hours (86400000 milliseconds)
     setInterval(sources.initializeClientWithSession, 86400000);
-  } else {
-    console.log('Environment variables LOGIN_EMAIL and LOGIN_PASSWORD are not defined.');
-  }
-// Schedule the fetch every 12 hours (43200000 milliseconds)
-setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
-// Initial fetch when the server starts
-sources.fetchRecentMoviesForAllLanguages();
+} else {
+    // If login credentials are not set, run the fetch function directly
+    console.log('Environment variables LOGIN_EMAIL and LOGIN_PASSWORD are not defined. Running fetch directly.');
+    sources.fetchRecentMoviesForAllLanguages();
+
+    // Schedule the fetch every 12 hours (43200000 milliseconds)
+    setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+}
 
 app.set('trust proxy', true);
 // Middleware for Swagger Stats

@@ -8,6 +8,7 @@
 	},
 	"dependencies": {
 		"axios": "latest",
+		"axios-cookiejar-support": "latest",
 		"cheerio": "latest",
 		"cors": "latest",
 		"dotenv": "latest",
@@ -16,10 +17,10 @@
 		"name-to-imdb": "latest",
 		"node-cache": "latest",
 		"node-html-parser": "latest",
-		"puppeteer": "latest",
 		"serve-index": "latest",
 		"stremio-addon-sdk": "latest",
-		"swagger-stats": "latest"
+		"swagger-stats": "latest",
+		"tough-cookie": "latest"
 	},
 	"devDependencies": {
 		"nodemon": "latest"
