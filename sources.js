@@ -24,15 +24,11 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         const results = {};
         await Promise.all(config.langs.map(async (lang) => {
-            try {
-                const movies = await getAllRecentMovies(maxPages, lang, false);
-                results[lang] = movies;
-            } catch (error) {
-                console.error(`Error fetching movies for language ${lang}:`, error);
-                throw error; // Propagate the error to the caller
-            }
-        }));
-
+            const movies = await getAllRecentMovies(maxPages, lang, false);
+            results[lang] = movies;
+        })).catch((error) => {
+            console.error("Error fetching movies for all languages:", error);
+        });
         // Final summary log
         console.info(`\n${useColors ? '\x1b[1m\x1b[33m' : ''}=== Final Summary ===${useColors ? '\x1b[0m' : ''}`);
         for (const [lang, movies] of Object.entries(results)) {
@@ -41,7 +37,6 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
         return results;
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
-        throw error; // Propagate the error to the caller
     }
 };
 const jar = new CookieJar();
@@ -87,23 +82,24 @@ async function initializeClientWithSession() {
     const password = process.env.LOGIN_PASSWORD;
 
     if (!email || !password) {
-        const error = new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
-        console.error(error.message);
-        throw error; // Propagate the error to the caller
+        throw new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
     }
 
     try {
+        // Step 1: Fetch the login page
         const loginUrl = "/login/";
         const loginPageResponse = await client.get(loginUrl).catch((err) => {
             throw new Error(`Failed to fetch login page: ${err.message}`);
         });
 
+        // Step 2: Extract the CSRF token
         const $ = cheerio.load(loginPageResponse.data);
         const csrfToken = $('html').attr('data-pageid');
         if (!csrfToken) {
             throw new Error('CSRF token not found in the login page.');
         }
 
+        // Step 3: Prepare the login payload
         const loginPayload = new URLSearchParams({
             xEvent: 'Login',
             xJson: JSON.stringify({ Email: email, Password: password }),
@@ -111,6 +107,7 @@ async function initializeClientWithSession() {
             'gorilla.csrf.Token': csrfToken,
         });
 
+        // Step 4: Send login request
         const ajaxLoginUrl = "/ajax/login/";
         const loginResponse = await client.post(
             ajaxLoginUrl,
@@ -128,6 +125,7 @@ async function initializeClientWithSession() {
             throw new Error(`Login request failed: ${err.message}`);
         });
 
+        // Step 5: Handle the login response
         if (loginResponse.data.Event === 'redirect') {
             const accountUrl = loginResponse.data.Data;
             const accountResponse = await client.get(accountUrl).catch((err) => {
@@ -149,7 +147,7 @@ async function initializeClientWithSession() {
         }
     } catch (error) {
         console.error("Login failed:", error.message);
-        throw error; // Propagate the error to the caller
+        throw error;
     }
 }
 
@@ -226,25 +224,30 @@ async function verifyImdbTitle(title, year) {
         const fetchedTitle = await ttnumberToTitle(imdbId);
         if (!fetchedTitle) return false;
 
+        // Extract the first word from both titles
         const inputFirstWord = title.split(/\s+/)[0].toLowerCase();
         const fetchedFirstWord = fetchedTitle.split(/\s+/)[0].toLowerCase();
 
+        // Check if the first words match exactly
         if (inputFirstWord === fetchedFirstWord) {
             //console.info(`Match Found: The title "${title}" matches the fetched title "${fetchedTitle}" for IMDb ID "${imdbId}".`);
-            return imdbId;
+            return imdbId; // Return IMDb ID if the first words match
         }
 
+        // If the first words are different but we want to avoid false positives, we can further refine the logic
+        // Example: Don't match numbers with words or completely different titles.
         if (inputFirstWord === fetchedFirstWord || 
             (isNaN(inputFirstWord) && isNaN(fetchedFirstWord) && inputFirstWord.toLowerCase().startsWith(fetchedFirstWord)) || 
             (inputFirstWord.toLowerCase() === fetchedFirstWord.toLowerCase())) {
             //console.warn(`Relaxed Match: The title "${title}" does not perfectly match the fetched title "${fetchedTitle}" but the first words align based on starting letter. Accepting as a match.`);
-            return imdbId;
+            return imdbId;// Adjusted to reject false positives more effectively
         }
 
+        // If no match found
         return null;
     } catch (err) {
         console.error(`Error in verifyImdbTitle: ${err.message}`);
-        throw err; // Propagate the error to the caller
+        return null; // Return null if there is an error
     }
 }
 
@@ -282,13 +285,13 @@ async function getImdbId(title, year) {
         if (result) {
             //console.log(`Fetched IMDb ID: ${result} For Title: "${cleanedTitle}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
-            return result;
+            return result;  // Return the result immediately after caching
         }
         //console.warn(`${useColors ? '\x1b[33m' : ''}IMDB ID Not Found For Cleaned Title: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}"${cleanedTitle}"${useColors ? '\x1b[0m' : ''}${cleanedTitle !== title ? `${useColors ? '\x1b[33m' : ''} Original Title: ${useColors ? '\x1b[36m' : ''}"${title}"${useColors ? '\x1b[0m' : ''}` : ''}${year ? ` ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''}` : ''}`);
         return null;
     } catch (err) {
         console.error(`Error Fetching IMDb ID For "${cleanedTitle}":`, err.message);
-        throw err; // Propagate the error to the caller
+        return null;
     }
 }
 
@@ -308,8 +311,8 @@ async function ttnumberToTitle(ttNumber) {
 
     const cachedTitle = cache.get(cacheKey);
     if (cachedTitle) {
-        const title = decompressData(cachedTitle);
-        return title;
+        const title = decompressData(cachedTitle); // Decompress the cached title
+        return title; // Return cached title
     }
 
     const fetchPromise = (async () => {
@@ -324,12 +327,13 @@ async function ttnumberToTitle(ttNumber) {
 
             if (title) {
                 //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                // Cache the title
                 cache.set(cacheKey, compressData(title));
             }
             return title;
         } catch (err) {
             console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
-            throw err; // Propagate the error to the caller
+            return null;
         }
     })();
 
@@ -396,6 +400,7 @@ async function stream(einthusan_id, lang) {
                 }
             }
         } else {
+            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
             einthusan_id = einthusan_id.replace("einthusan_", "");
             //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
@@ -436,12 +441,12 @@ async function stream(einthusan_id, lang) {
         cache.set(cacheKey, compressData(result), 3600);
         return result;
     } catch (err) {
+        // Handle specific and general errors
         if (err.message.includes("Einthusan ID could not be retrieved") || err.message.includes("is not valid for the language")) {
             // Handle specific case
         } else {
             console.error("Error in Stream Function:", err.message);
         }
-        throw err; // Propagate the error to the caller
     }
 }
 
@@ -458,7 +463,7 @@ async function search(lang, slug) {
         return results;
     } catch (err) {
         console.error("Error in search function:", err.message, { lang, slug });
-        throw err; // Propagate the error to the caller
+        return null;
     }
 }
 
@@ -471,6 +476,7 @@ async function getcatalogresults(url) {
         const html = parse(response.data);
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
 
+        // Process results in batches for better performance
         const batchSize = 10;
         const resultsArray = [];
 
@@ -481,10 +487,11 @@ async function getcatalogresults(url) {
                 const infoElement = item.querySelector("div.info p");
                 const titleElement = item.querySelector("a.title h3");
                 const idElement = item.querySelector("a.title");
-                const ttElement = item.querySelectorAll("div.extras a")[0];
+                const ttElement = item.querySelectorAll("div.extras a")[0]; // Select the first <a> element
                 const synopsisElement = item.querySelector("p.synopsis");
                 const trailerElement = item.querySelectorAll("div.extras a")[1];
 
+                // Handle null or missing elements
                 if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
                 const img = imgElement.rawAttributes?.src || null;
@@ -493,18 +500,22 @@ async function getcatalogresults(url) {
                 const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
                 const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
+                // Skip if required fields are missing
                 if (!img || !year || !title || !einthusanId) return null;
 
-                let imdbId = ttNumber;
+                let imdbId = ttNumber; // Default to ttNumber
                 if (!imdbId) {
-                    imdbId = await verifyImdbTitle(title, year);
+                    imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
                 }
 
+                // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
                 const finalId = imdbId || `einthusan_${einthusanId}`;
 
+                // Handle additional metadata
                 const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
                 const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
 
+                // Extract cast and roles
                 const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
                     const name = prof.querySelector("p")?.rawText.trim() || null;
                     const role = prof.querySelector("label")?.rawText.trim() || null;
@@ -514,27 +525,31 @@ async function getcatalogresults(url) {
                 const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                 const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
+                // Determine poster URL
                 let posterUrl = img.startsWith('http') ? img : `https:${img}`;
 
+                // Check RatingPosterDB API if IMDb ID is valid
                 if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
                     const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
 
                     try {
+                        // Check if the RatingPosterDB URL is valid
                         const response = await fetch(apiUrl, { method: 'HEAD' });
                         if (response.ok) {
-                            posterUrl = apiUrl;
+                            posterUrl = apiUrl; // Use RatingPosterDB URL if valid
                         }
                     } catch (error) {
                         //console.error(`Error checking RatingPosterDB for ${title}:`, error);
                     }
                 }
 
+                // Construct metadata object
                 return {
                     id: finalId,
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
-                    poster: posterUrl,
+                    poster: posterUrl, // Use the updated poster URL
                     releaseInfo: year,
                     description,
                     trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
@@ -563,7 +578,6 @@ async function getcatalogresults(url) {
         return resultsArray;
     } catch (err) {
         console.error("Error in GetCatalogResults Function:", err.message);
-        throw err; // Propagate the error to the caller
     }
 }
 
@@ -595,22 +609,23 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
                 cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID)); // Cache compressed ID
                 return matchByTTNumber.EinthusanID;
             }
+            // Move the error throw outside of the if statement
             //throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
         }
 
         const normalizedSearchTitle = normalizeTitle(title);
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
-
+        
         if (match) {
             //console.info(`Found Einthusan ID: ${match.EinthusanID} for Title: ${title}`);
             cache.set(cacheKey, compressData(match.EinthusanID)); // Cache compressed ID
             return match.EinthusanID;
         }
-
+        
         //throw new Error(`No match found for Title: ${title}`);
     } catch (err) {
+        // Log only the concise error message
         console.error(err.message); // Only log the error message
-        throw err; // Propagate the error to the caller
     }
 }
 
@@ -659,10 +674,11 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                         const infoElement = item.querySelector("div.info p");
                         const titleElement = item.querySelector("a.title h3");
                         const idElement = item.querySelector("a.title");
-                        const ttElement = item.querySelectorAll("div.extras a")[0];
+                        const ttElement = item.querySelectorAll("div.extras a")[0]; 
                         const synopsisElement = item.querySelector("p.synopsis");
                         const trailerElement = item.querySelectorAll("div.extras a")[1];
 
+                        // Handle null or missing elements
                         if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
                         const img = imgElement.rawAttributes?.src || null;
@@ -671,6 +687,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                         const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
                         const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
+                        // Skip if required fields are missing
                         if (!img || !year || !title || !einthusanId) return null;
 
                         let imdbId = ttNumber; // Default to ttNumber
@@ -678,11 +695,14 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                             imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
                         }
 
+                        // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
                         const finalId = imdbId || `einthusan_${einthusanId}`;
 
+                        // Handle additional metadata
                         const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
                         const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
 
+                        // Extract cast and roles
                         const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
                             const name = prof.querySelector("p")?.rawText.trim() || null;
                             const role = prof.querySelector("label")?.rawText.trim() || null;
@@ -692,8 +712,10 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                         const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                         const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
+                        // Determine poster URL
                         let posterUrl = img.startsWith('http') ? img : `https:${img}`;
 
+                        // Check RatingPosterDB API if IMDb ID is valid
                         if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
                             const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
 
@@ -708,12 +730,13 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                             }
                         }
 
+                        // Construct metadata object
                         return {
                             id: finalId,
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
-                            poster: posterUrl,
+                            poster: posterUrl, // Use the updated poster URL
                             releaseInfo: year,
                             description,
                             trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
@@ -772,9 +795,8 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
-        throw err; // Propagate the error to the caller
     }
-};
+}
 
 async function meta(einthusan_id, lang) {
     try {
@@ -782,41 +804,47 @@ async function meta(einthusan_id, lang) {
         let mappedEinthusanId;
 
         if (einthusan_id.startsWith("tt")) {
-            const cacheKeyForMovies = `recent_movies_${lang}_15`;
+            // Check the recent movies cache for a mapping of ttnumber to einthusan_id
+            const cacheKeyForMovies = `recent_movies_${lang}_15`; // Assuming the cache key for recent movies is valid
             const cachedMovies = cache.get(cacheKeyForMovies);
 
             if (cachedMovies) {
                 const movies = decompressData(cachedMovies);
-                const movie = movies.find(m => m.id === einthusan_id);
+                // Look for the movie that matches the imdb ID (e.g., "tt10916120")
+                const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
                 if (movie) {
-                    mappedEinthusanId = movie.EinthusanID;
+                    mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
                     //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
 
             if (mappedEinthusanId) {
-                einthusan_id = mappedEinthusanId;
+                einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
             } else {
+                // Fall back to the existing logic if no mapping found
                 const imdbTitle = await ttnumberToTitle(einthusan_id);
                 if (!imdbTitle) return;
+                // Get Einthusan ID for this title and language
                 einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
                 }
             }
         } else {
+            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
             einthusan_id = einthusan_id.replace("einthusan_", "");
             //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
 
         const cacheKey = einthusan_id.startsWith("tt")
-            ? `tt_${einthusan_id}`
+            ? `tt_${einthusan_id}` // For ttnumber, use tt_<ttnumber>
             : `einthusan_${einthusan_id}`;
-
+        
         const cachedMeta = cache.get(cacheKey);
 
         if (cachedMeta) {
-            const updatedMeta = { ...cachedMeta };
+            // Dynamically set the ID based on the current input
+            const updatedMeta = { ...cachedMeta };  // Clone the cached object to avoid mutation issues
             updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
             return updatedMeta;
         }
@@ -830,6 +858,7 @@ async function meta(einthusan_id, lang) {
         const movieSummary = html.querySelector("#UIMovieSummary")?.querySelector("li");
         if (!movieSummary) throw new Error("Movie summary element not found");
 
+        // Extract metadata elements
         const imgElement = movieSummary.querySelector("div.block1 a img");
         const infoElement = movieSummary.querySelector("div.info p");
         const titleElement = movieSummary.querySelector("a.title h3");
@@ -846,8 +875,9 @@ async function meta(einthusan_id, lang) {
         const title = decodeHtmlEntities(titleElement.rawText.trim());
         const description = decodeHtmlEntities(synopsisElement.rawText.trim());
         const einthusanId = idElement.rawAttributes?.href.split('/')[3];
-        const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+        const trailer = trailerElement?.rawAttributes['href'] ?.split("v=")[1] || null;
 
+        // Extract cast and roles
         const castAndRoles = Array.from(html.querySelectorAll("div.prof")).map(prof => {
             const name = prof.querySelector("p")?.rawText.trim();
             const role = prof.querySelector("label")?.rawText.trim();
@@ -856,7 +886,7 @@ async function meta(einthusan_id, lang) {
 
         const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name);
         const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name);
-
+        // Construct metadata object
         const metaObj = {
             id: originalId,
             EinthusanID: einthusanId,
@@ -885,7 +915,6 @@ async function meta(einthusan_id, lang) {
         return metaObj;
     } catch (e) {
         //console.error("Error in meta function:", e.message);
-        throw e; // Propagate the error to the caller
     }
 }
 
