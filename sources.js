@@ -298,7 +298,7 @@ async function getImdbId(title, year) {
 // Create a promise cache
 const promiseCache = new Map();
 
-async function ttnumberToTitle(ttNumber) {
+async function ttnumberToTitle(ttNumber, retries = 3) {
     const ttNumberRegex = /^tt\d{7,8}$/;
     if (!ttNumberRegex.test(ttNumber)) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
@@ -311,29 +311,34 @@ async function ttnumberToTitle(ttNumber) {
 
     const cachedTitle = cache.get(cacheKey);
     if (cachedTitle) {
-        const title = decompressData(cachedTitle); // Decompress the cached title
-        return title; // Return cached title
+        const title = decompressData(cachedTitle);
+        return title;
     }
 
     const fetchPromise = (async () => {
-        try {
-            const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 }).catch((err) => {
-                throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
-            });
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch((err) => {
+                    throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
+                });
 
-            const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-            const title = movie ? movie.l : null;
+                const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
+                const title = movie ? movie.l : null;
 
-            if (title) {
-                //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
-                // Cache the title
-                cache.set(cacheKey, compressData(title));
+                if (title) {
+                    //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                    cache.set(cacheKey, compressData(title));
+                }
+                return title;
+            } catch (err) {
+                if (attempt < retries) {
+                    console.warn(`Attempt ${attempt} failed. Retrying...`);
+                    await sleep(2000); // Wait 2 seconds before retrying
+                } else {
+                    console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
+                }
             }
-            return title;
-        } catch (err) {
-            console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
-            return null;
         }
     })();
 
@@ -647,7 +652,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
             const pageUrl = `/movie/results/?find=Recent&lang=${lang}&page=${page}`;
 
             try {
-                const response = await requestQueue.add(() => client.get(pageUrl));
+                const response = await requestQueue.add(() => client.get(pageUrl, { timeout: 10000 })); // Increased timeout to 10 seconds
                 if (response.status === 200) {
                     const body = response.data;
                     if (body.includes('<title>Rate Limited - Einthusan</title>')) {
@@ -670,89 +675,85 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
 
                 const movies = await Promise.all(
                     searchResults.map(async (item) => {
-                        const imgElement = item.querySelector("div.block1 a img");
-                        const infoElement = item.querySelector("div.info p");
-                        const titleElement = item.querySelector("a.title h3");
-                        const idElement = item.querySelector("a.title");
-                        const ttElement = item.querySelectorAll("div.extras a")[0]; 
-                        const synopsisElement = item.querySelector("p.synopsis");
-                        const trailerElement = item.querySelectorAll("div.extras a")[1];
+                        try {
+                            const imgElement = item.querySelector("div.block1 a img");
+                            const infoElement = item.querySelector("div.info p");
+                            const titleElement = item.querySelector("a.title h3");
+                            const idElement = item.querySelector("a.title");
+                            const ttElement = item.querySelectorAll("div.extras a")[0];
+                            const synopsisElement = item.querySelector("p.synopsis");
+                            const trailerElement = item.querySelectorAll("div.extras a")[1];
 
-                        // Handle null or missing elements
-                        if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
+                            if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
-                        const img = imgElement.rawAttributes?.src || null;
-                        const year = infoElement.childNodes[0]?.rawText.trim() || null;
-                        const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
-                        const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
-                        const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
+                            const img = imgElement.rawAttributes?.src || null;
+                            const year = infoElement.childNodes[0]?.rawText.trim() || null;
+                            const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
+                            const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
+                            const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
-                        // Skip if required fields are missing
-                        if (!img || !year || !title || !einthusanId) return null;
+                            if (!img || !year || !title || !einthusanId) return null;
 
-                        let imdbId = ttNumber; // Default to ttNumber
-                        if (!imdbId) {
-                            imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
-                        }
-
-                        // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
-                        const finalId = imdbId || `einthusan_${einthusanId}`;
-
-                        // Handle additional metadata
-                        const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
-                        const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
-
-                        // Extract cast and roles
-                        const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
-                            const name = prof.querySelector("p")?.rawText.trim() || null;
-                            const role = prof.querySelector("label")?.rawText.trim() || null;
-                            return name && role ? { name, role } : null;
-                        }).filter(Boolean);
-
-                        const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
-                        const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
-
-                        // Determine poster URL
-                        let posterUrl = img.startsWith('http') ? img : `https:${img}`;
-
-                        // Check RatingPosterDB API if IMDb ID is valid
-                        if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
-                            const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
-
-                            try {
-                                // Check if the RatingPosterDB URL is valid
-                                const response = await fetch(apiUrl, { method: 'HEAD' });
-                                if (response.ok) {
-                                    posterUrl = apiUrl; // Use RatingPosterDB URL if valid
-                                }
-                            } catch (error) {
-                                //console.error(`Error checking RatingPosterDB for ${title}:`, error);
+                            let imdbId = ttNumber; // Default to ttNumber
+                            if (!imdbId) {
+                                imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
                             }
-                        }
 
-                        // Construct metadata object
-                        return {
-                            id: finalId,
-                            EinthusanID: einthusanId,
-                            type: "movie",
-                            name: title,
-                            poster: posterUrl, // Use the updated poster URL
-                            releaseInfo: year,
-                            description,
-                            trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
-                            links: [
-                                ...actors.map(actor => ({
-                                    name: actor,
-                                    category: "Cast",
-                                    url: `stremio:///search?search=${encodeURIComponent(actor)}`
-                                })),
-                                ...directors.map(director => ({
-                                    name: director,
-                                    category: "Directors",
-                                    url: `stremio:///search?search=${encodeURIComponent(director)}`
-                                })),
-                            ]
-                        };
+                            const finalId = imdbId || `einthusan_${einthusanId}`;
+
+                            const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
+                            const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+
+                            const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
+                                const name = prof.querySelector("p")?.rawText.trim() || null;
+                                const role = prof.querySelector("label")?.rawText.trim() || null;
+                                return name && role ? { name, role } : null;
+                            }).filter(Boolean);
+
+                            const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
+                            const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
+
+                            let posterUrl = img.startsWith('http') ? img : `https:${img}`;
+
+                            if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
+                                const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
+
+                                try {
+                                    const response = await fetch(apiUrl, { method: 'HEAD' });
+                                    if (response.ok) {
+                                        posterUrl = apiUrl;
+                                    }
+                                } catch (error) {
+                                    //console.error(`Error checking RatingPosterDB for ${title}:`, error);
+                                }
+                            }
+
+                            return {
+                                id: finalId,
+                                EinthusanID: einthusanId,
+                                type: "movie",
+                                name: title,
+                                poster: posterUrl,
+                                releaseInfo: year,
+                                description,
+                                trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
+                                links: [
+                                    ...actors.map(actor => ({
+                                        name: actor,
+                                        category: "Cast",
+                                        url: `stremio:///search?search=${encodeURIComponent(actor)}`
+                                    })),
+                                    ...directors.map(director => ({
+                                        name: director,
+                                        category: "Directors",
+                                        url: `stremio:///search?search=${encodeURIComponent(director)}`
+                                    })),
+                                ]
+                            };
+                        } catch (err) {
+                            console.error(`Error processing movie on page ${page}:`, err.message);
+                            return null; // Skip this movie and continue
+                        }
                     })
                 );
 
@@ -761,14 +762,13 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                 return validMovies;
             } catch (err) {
                 if (retries > 0) {
-                    console.warn(`Error fetching page ${page}, retrying... (${3 - retries} attempts left)`);
+                    console.warn(`Error fetching page ${page}, retrying... (${retries - 1} attempts left)`);
+                    await sleep(2000); // Wait 2 seconds before retrying
                     return fetchPage(page, retries - 1);
                 } else {
-                    console.error(`Error fetching page ${page} after multiple attempts in getAllRecentMovies:`, err.message);
-                    return [];
+                    console.error(`Error fetching page ${page} after multiple attempts:`, err.message);
+                    return []; // Return an empty array to continue fetching other pages
                 }
-            } finally {
-                await sleep(1000); // Delay between requests to avoid rate limiting
             }
         };
 
@@ -795,6 +795,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
+        //throw err; // Propagate the error to the caller
     }
 }
 
