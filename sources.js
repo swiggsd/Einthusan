@@ -525,13 +525,31 @@ async function getcatalogresults(url) {
                 const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                 const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
+                // Determine poster URL
+                let posterUrl = img.startsWith('http') ? img : `https:${img}`;
+
+                // Check RatingPosterDB API if IMDb ID is valid
+                if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
+                    const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
+
+                    try {
+                        // Check if the RatingPosterDB URL is valid
+                        const response = await fetch(apiUrl, { method: 'HEAD' });
+                        if (response.ok) {
+                            posterUrl = apiUrl; // Use RatingPosterDB URL if valid
+                        }
+                    } catch (error) {
+                        //console.error(`Error checking RatingPosterDB for ${title}:`, error);
+                    }
+                }
+
                 // Construct metadata object
                 return {
                     id: finalId,
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
-                    poster: img.startsWith('http') ? img : `https:${img}`,
+                    poster: posterUrl, // Use the updated poster URL
                     releaseInfo: year,
                     description,
                     trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
@@ -694,13 +712,31 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                         const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                         const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
+                        // Determine poster URL
+                        let posterUrl = img.startsWith('http') ? img : `https:${img}`;
+
+                        // Check RatingPosterDB API if IMDb ID is valid
+                        if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
+                            const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
+
+                            try {
+                                // Check if the RatingPosterDB URL is valid
+                                const response = await fetch(apiUrl, { method: 'HEAD' });
+                                if (response.ok) {
+                                    posterUrl = apiUrl; // Use RatingPosterDB URL if valid
+                                }
+                            } catch (error) {
+                                //console.error(`Error checking RatingPosterDB for ${title}:`, error);
+                            }
+                        }
+
                         // Construct metadata object
                         return {
                             id: finalId,
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
-                            poster: img.startsWith('http') ? img : `https:${img}`,
+                            poster: posterUrl, // Use the updated poster URL
                             releaseInfo: year,
                             description,
                             trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
