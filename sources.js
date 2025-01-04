@@ -317,7 +317,7 @@ async function ttnumberToTitle(ttNumber) {
 
     // Step 1: Generate cache keys for the IMDb ID
     const cacheKey = `title_${ttNumber}`;
-    
+
     // Check if a request for this `ttNumber` is already in progress
     if (promiseCache.has(ttNumber)) {
         return promiseCache.get(ttNumber); // Return the existing promise
@@ -325,7 +325,7 @@ async function ttnumberToTitle(ttNumber) {
 
     // Check the cache for title information
     const cachedTitle = cache.get(cacheKey);
-    
+
     if (cachedTitle) {
         const title = decompressData(cachedTitle); // Decompress the cached title
         return title; // Return cached title
@@ -334,55 +334,31 @@ async function ttnumberToTitle(ttNumber) {
     // Create a new promise for this `ttNumber` and store it in the promise cache
     const fetchPromise = (async () => {
         try {
-            const omdbApiKey = process.env.OMDB_API_KEY;
-            if (!omdbApiKey) {
-                console.error('OMDB API Key is missing in environment variables.');
-                return null;
+            // Fetch title from IMDb suggestions API
+            const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+
+            // Extract the title from the response
+            const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
+            const title = movie ? movie.l : null;
+
+            if (title) {
+                console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
+                // Cache the title
+                cache.set(cacheKey, compressData(title));
+            } else {
+                console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
             }
-
-            // Step 2: Fetch movie details from the OMDB API using the IMDb ID (ttNumber)
-            const omdbUrl = `https://www.omdbapi.com/?i=${ttNumber}&apikey=${omdbApiKey}`;
-            const response = await axios.get(omdbUrl, { timeout: 5000 });
-            const movieData = response.data;
-            const movieTitle = movieData.Title; // Movie title from OMDB response
-            
-            // Step 5: Cache the title
-            cache.set(cacheKey, compressData(movieTitle));
-            return movieTitle; // Return the title directly from OMDB response
-
+            return title; // Return the title or null if not found
         } catch (err) {
-            // Step 6: Error handling for OMDB API
-            //console.error('Error Fetching Movie Data For IMDb ID: %s From OMDB API. Error Message: %s', ttNumber, err.message);
-            
-            // Failsafe logic: Fetch title from IMDb suggestions API
-            //console.info(`Attempting To Fetch Title From IMDb Suggestions API For IMDb ID: ${ttNumber}.`);
-            
-            try {
-                const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
-                
-                // Extract the title from the response
-                const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-                const title = movie ? movie.l : null;
-                
-                if (title) {
-                    //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
-                    // Step 5: Cache the title
-                    cache.set(cacheKey, compressData(title));
-                } else {
-                    console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
-                }
-                return title; // Return the title or null if not found
-            } catch (imdbErr) {
-                console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, imdbErr.message);
-                return null; // Return null if both API calls fail
-            }
+            console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
+            return null; // Return null if the API call fails
         }
     })();
 
     // Store the promise in the cache
     promiseCache.set(ttNumber, fetchPromise);
-    
+
     // Remove the promise from the cache once it resolves or rejects
     fetchPromise.finally(() => {
         promiseCache.delete(ttNumber);
@@ -435,10 +411,9 @@ async function stream(einthusan_id, lang) {
                 const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
                 if (movie) {
                     mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
-                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
-
             if (mappedEinthusanId) {
                 einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
             } else {
@@ -519,8 +494,6 @@ async function search(lang, slug) {
     }
 }
 
-
-
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
     try {
@@ -539,26 +512,66 @@ async function getcatalogresults(url) {
                 const infoElement = item.querySelector("div.info p");
                 const titleElement = item.querySelector("a.title h3");
                 const idElement = item.querySelector("a.title");
+                const ttElement = item.querySelectorAll("div.extras a")[0]; // Select the first <a> element
+                const synopsisElement = item.querySelector("p.synopsis");
+                const trailerElement = item.querySelectorAll("div.extras a")[1];
 
-                if (!imgElement || !infoElement || !titleElement || !idElement) return null;
+                // Handle null or missing elements
+                if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
-                const img = imgElement.rawAttributes?.src;
-                const year = infoElement.childNodes[0]?.rawText.trim();
-                const title = decodeHtmlEntities(titleElement.rawText.trim());
-                const einthusanId = idElement.rawAttributes?.href.split('/')[3];
+                const img = imgElement.rawAttributes?.src || null;
+                const year = infoElement.childNodes[0]?.rawText.trim() || null;
+                const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
+                const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
+                const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
+                // Skip if required fields are missing
                 if (!img || !year || !title || !einthusanId) return null;
 
-                // Fetch IMDb ID and verify the match
-                const imdbId = await verifyImdbTitle(title, year); 
+                let imdbId = ttNumber; // Default to ttNumber
+                if (!imdbId) {
+                    imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
+                }
 
+                // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
+                const finalId = imdbId || `einthusan_${einthusanId}`;
+
+                // Handle additional metadata
+                const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
+                const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+
+                // Extract cast and roles
+                const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
+                    const name = prof.querySelector("p")?.rawText.trim() || null;
+                    const role = prof.querySelector("label")?.rawText.trim() || null;
+                    return name && role ? { name, role } : null;
+                }).filter(Boolean);
+
+                const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
+                const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
+
+                // Construct metadata object
                 return {
-                    id: imdbId || `einthusan_${einthusanId}`, // Use IMDb ID if verified, else fallback to Einthusan ID
+                    id: finalId,
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
                     poster: img.startsWith('http') ? img : `https:${img}`,
-                    releaseInfo: year
+                    releaseInfo: year,
+                    description,
+                    trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
+                    links: [
+                        ...actors.map(actor => ({
+                            name: actor,
+                            category: "Cast",
+                            url: `stremio:///search?search=${encodeURIComponent(actor)}`
+                        })),
+                        ...directors.map(director => ({
+                            name: director,
+                            category: "Directors",
+                            url: `stremio:///search?search=${encodeURIComponent(director)}`
+                        })),
+                    ]
                 };
             });
 
@@ -670,31 +683,66 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                         const infoElement = item.querySelector("div.info p");
                         const titleElement = item.querySelector("a.title h3");
                         const idElement = item.querySelector("a.title");
+                        const ttElement = item.querySelectorAll("div.extras a")[0]; 
+                        const synopsisElement = item.querySelector("p.synopsis");
+                        const trailerElement = item.querySelectorAll("div.extras a")[1];
 
-                        if (!imgElement || !infoElement || !titleElement || !idElement) return null;
+                        // Handle null or missing elements
+                        if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
-                        const img = imgElement.rawAttributes?.src;
-                        const year = infoElement.childNodes[0]?.rawText.trim();
-                        const title = decodeHtmlEntities(titleElement.rawText.trim());
-                        const einthusanId = idElement.rawAttributes?.href.split('/')[3];
+                        const img = imgElement.rawAttributes?.src || null;
+                        const year = infoElement.childNodes[0]?.rawText.trim() || null;
+                        const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
+                        const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
+                        const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
+                        // Skip if required fields are missing
                         if (!img || !year || !title || !einthusanId) return null;
 
-                        const imdbId = await verifyImdbTitle(title, year); 
+                        let imdbId = ttNumber; // Default to ttNumber
+                        if (!imdbId) {
+                            imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
+                        }
 
-                        // Fetch additional metadata using the existing meta function
-                        const metaData = await meta(`einthusan_${einthusanId}`, lang);
+                        // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
+                        const finalId = imdbId || `einthusan_${einthusanId}`;
 
+                        // Handle additional metadata
+                        const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
+                        const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+
+                        // Extract cast and roles
+                        const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
+                            const name = prof.querySelector("p")?.rawText.trim() || null;
+                            const role = prof.querySelector("label")?.rawText.trim() || null;
+                            return name && role ? { name, role } : null;
+                        }).filter(Boolean);
+
+                        const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
+                        const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
+
+                        // Construct metadata object
                         return {
-                            id: imdbId || `einthusan_${einthusanId}`, 
+                            id: finalId,
                             EinthusanID: einthusanId,
                             type: "movie",
                             name: title,
                             poster: img.startsWith('http') ? img : `https:${img}`,
                             releaseInfo: year,
-                            description: metaData?.description || null,
-                            trailers: metaData?.trailers || [],
-                            links: metaData?.links || []
+                            description,
+                            trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
+                            links: [
+                                ...actors.map(actor => ({
+                                    name: actor,
+                                    category: "Cast",
+                                    url: `stremio:///search?search=${encodeURIComponent(actor)}`
+                                })),
+                                ...directors.map(director => ({
+                                    name: director,
+                                    category: "Directors",
+                                    url: `stremio:///search?search=${encodeURIComponent(director)}`
+                                })),
+                            ]
                         };
                     })
                 );
