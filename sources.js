@@ -298,7 +298,7 @@ async function getImdbId(title, year) {
 // Create a promise cache
 const promiseCache = new Map();
 
-async function ttnumberToTitle(ttNumber, retries = 3) {
+async function ttnumberToTitle(ttNumber, retries = 5) {
     const ttNumberRegex = /^tt\d{7,8}$/;
     if (!ttNumberRegex.test(ttNumber)) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
@@ -319,7 +319,14 @@ async function ttnumberToTitle(ttNumber, retries = 3) {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
                 const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch((err) => {
+                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch(async (err) => {
+                    // Handle 429 Too Many Requests error
+                    if (err.response && err.response.status === 429) {
+                        const retryAfter = err.response.headers['retry-after'] || 5; // Default to 5 seconds if header is missing
+                        console.warn(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
+                        await sleep(retryAfter * 1000); // Convert seconds to milliseconds
+                        throw err; // Retry the request
+                    }
                     throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
                 });
 
@@ -390,7 +397,7 @@ async function stream(einthusan_id, lang) {
                 const movie = movies.find(m => m.id === einthusan_id);
                 if (movie) {
                     mappedEinthusanId = movie.EinthusanID;
-                    console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
 
