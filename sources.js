@@ -23,14 +23,15 @@ const cache = new NodeCache({
 const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         const results = {};
-        // Fetch movies for all languages in parallel
         await Promise.all(config.langs.map(async (lang) => {
             const movies = await getAllRecentMovies(maxPages, lang, false);
             results[lang] = movies;
-        }));
+        })).catch((error) => {
+            console.error("Error fetching movies for all languages:", error);
+        });
         // Final summary log
-            console.info(`\n${useColors ? '\x1b[1m\x1b[33m' : ''}=== Final Summary ===${useColors ? '\x1b[0m' : ''}`);
-            for (const [lang, movies] of Object.entries(results)) {
+        console.info(`\n${useColors ? '\x1b[1m\x1b[33m' : ''}=== Final Summary ===${useColors ? '\x1b[0m' : ''}`);
+        for (const [lang, movies] of Object.entries(results)) {
             console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[32m' : ''}${movies.length}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
         }
         return results;
@@ -68,10 +69,7 @@ const client = wrapper(axios.create({
         'Accept-Encoding': 'gzip, deflate, br',
         'Connection': 'keep-alive'
     },
-    // Enable HTTP keep-alive
-    //httpAgent: new (require('http').Agent)({ keepAlive: true }),
-    //httpsAgent: new (require('https').Agent)({ keepAlive: true }),
-    // Attach the cookie jar
+        // Attach the cookie jar
     jar,
     withCredentials: true, // Ensure cookies are sent with requests
     // Implement retry logic
@@ -90,7 +88,9 @@ async function initializeClientWithSession() {
     try {
         // Step 1: Fetch the login page
         const loginUrl = "/login/";
-        const loginPageResponse = await client.get(loginUrl);
+        const loginPageResponse = await client.get(loginUrl).catch((err) => {
+            throw new Error(`Failed to fetch login page: ${err.message}`);
+        });
 
         // Step 2: Extract the CSRF token
         const $ = cheerio.load(loginPageResponse.data);
@@ -98,7 +98,6 @@ async function initializeClientWithSession() {
         if (!csrfToken) {
             throw new Error('CSRF token not found in the login page.');
         }
-        //console.log("CSRF token extracted:", csrfToken);
 
         // Step 3: Prepare the login payload
         const loginPayload = new URLSearchParams({
@@ -119,24 +118,21 @@ async function initializeClientWithSession() {
                     'X-Requested-With': 'XMLHttpRequest',
                     'Origin': 'https://einthusan.tv',
                     'Referer': 'https://einthusan.tv/login/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36', // Add User-Agent
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
                 },
             }
-        );
+        ).catch((err) => {
+            throw new Error(`Login request failed: ${err.message}`);
+        });
 
         // Step 5: Handle the login response
-        //console.log("Login response:", loginResponse.data);
         if (loginResponse.data.Event === 'redirect') {
-            //console.log("Login successful! Redirecting to:", loginResponse.data.Data);
-
-            // Step 6: Fetch the account page
             const accountUrl = loginResponse.data.Data;
-            const accountResponse = await client.get(accountUrl);
+            const accountResponse = await client.get(accountUrl).catch((err) => {
+                throw new Error(`Failed to fetch account page: ${err.message}`);
+            });
 
-            // Step 7: Parse the account page HTML
             const $account = cheerio.load(accountResponse.data);
-
-            // Step 8: Extract account details
             const accountDetails = {
                 username: $account('div.profile div.header div div.quickinfo h2').text().trim(),
                 email: $account('div.profile div.header div div.quickinfo p.e-addr').text().trim(),
@@ -145,16 +141,12 @@ async function initializeClientWithSession() {
             };
 
             console.log("Account details:", accountDetails);
-
-            // Resolve the promise to indicate successful login
             return accountDetails;
         } else {
-            // Reject the promise if login fails
             throw new Error("Login failed: " + (loginResponse.data.message || "Unknown error"));
         }
     } catch (error) {
         console.error("Login failed:", error.message);
-        // Reject the promise with the error
         throw error;
     }
 }
@@ -263,33 +255,33 @@ const requestQueue = new RequestQueue();
 
 // Optimized IMDb ID fetching
 async function getImdbId(title, year) {
-    // Validate the title
     if (typeof title !== 'string' || !title.trim()) {
         console.error('Invalid Title Provided.');
         return null;
     }
-    // Remove the year and any additional text (e.g., "Film") after the year from the title
     const cleanedTitle = title.replace(/\s?\(.*?\)$/, '').replace(/#/g, '').trim();
 
-    // Convert year to a number if it is provided
     if (year !== undefined) {
-        year = Number(year); // Convert to number
-        // Validate the year
+        year = Number(year);
         if (isNaN(year) || year < 1888 || year > new Date().getFullYear()) {
             console.error('Invalid Year Provided. Year Must Be A Number Between 1888 And The Current Year.');
             return null;
         }
     }
-    // Create a cache key that includes both the cleaned title and year
+
     const cacheKey = `imdb_${normalizeTitle(cleanedTitle)}_${year || 'any'}`;
     const cached = cache.get(cacheKey);
     if (cached) {
         //console.log(`Cache Hit For IMDb ID: ${cleanedTitle} ${year ? `(${year})` : ''}`);
         return decompressData(cached);
     }
+
     try {
-        // Call the promisified version of nameToImdb with both cleanedTitle and year
-        const result = await getImdbIdAsync({ name: cleanedTitle, year: year });
+        const result = await getImdbIdAsync({ name: cleanedTitle, year: year }).catch((err) => {
+            console.error(`Error Fetching IMDb ID For "${cleanedTitle}":`, err.message);
+            return null;
+        });
+
         if (result) {
             //console.log(`Fetched IMDb ID: ${result} For Title: "${cleanedTitle}"${year ? ` (${year})` : ''}`);
             cache.set(cacheKey, compressData(result));
@@ -307,38 +299,29 @@ async function getImdbId(title, year) {
 const promiseCache = new Map();
 
 async function ttnumberToTitle(ttNumber) {
-    // Regular expression to validate the IMDb ID format (7 or 8 digits)
     const ttNumberRegex = /^tt\d{7,8}$/;
-
-    // Validate the ttNumber
     if (!ttNumberRegex.test(ttNumber)) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
     }
 
-    // Step 1: Generate cache keys for the IMDb ID
     const cacheKey = `title_${ttNumber}`;
-
-    // Check if a request for this `ttNumber` is already in progress
     if (promiseCache.has(ttNumber)) {
-        return promiseCache.get(ttNumber); // Return the existing promise
+        return promiseCache.get(ttNumber);
     }
 
-    // Check the cache for title information
     const cachedTitle = cache.get(cacheKey);
-
     if (cachedTitle) {
         const title = decompressData(cachedTitle); // Decompress the cached title
         return title; // Return cached title
     }
 
-    // Create a new promise for this `ttNumber` and store it in the promise cache
     const fetchPromise = (async () => {
         try {
-            // Fetch title from IMDb suggestions API
             const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 });
+            const imdbResponse = await axios.get(imdbApiUrl, { timeout: 5000 }).catch((err) => {
+                throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
+            });
 
-            // Extract the title from the response
             const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
             const title = movie ? movie.l : null;
 
@@ -346,20 +329,15 @@ async function ttnumberToTitle(ttNumber) {
                 console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
                 // Cache the title
                 cache.set(cacheKey, compressData(title));
-            } else {
-                console.info(`No Title Found For IMDb ID: ${ttNumber} In IMDb Suggestions API.`);
             }
-            return title; // Return the title or null if not found
+            return title;
         } catch (err) {
             console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
-            return null; // Return null if the API call fails
+            return null;
         }
     })();
 
-    // Store the promise in the cache
     promiseCache.set(ttNumber, fetchPromise);
-
-    // Remove the promise from the cache once it resolves or rejects
     fetchPromise.finally(() => {
         promiseCache.delete(ttNumber);
     });
@@ -377,10 +355,9 @@ const replaceIpInLink = (link) => {
 
 // Optimized stream function
 async function stream(einthusan_id, lang) {
-    // Check if lang is undefined
     if (typeof lang === 'undefined') {
         console.error("Error: 'lang' Parameter Is Undefined.");
-        return; // Exit the function early
+        return;
     }
 
     const imdb = einthusan_id;
@@ -398,29 +375,25 @@ async function stream(einthusan_id, lang) {
         let title;
         let validEinthusanId = false;
 
-        // Check if einthusan_id starts with "tt" (IMDB ID)
         if (einthusan_id.startsWith("tt")) {
-            // Check the recent movies cache for a mapping of ttnumber to einthusan_id
-            const cacheKeyForMovies = `recent_movies_${lang}_15`; // Assuming the cache key for recent movies is valid
+            const cacheKeyForMovies = `recent_movies_${lang}_15`;
             const cachedMovies = cache.get(cacheKeyForMovies);
 
             let mappedEinthusanId;
             if (cachedMovies) {
                 const movies = decompressData(cachedMovies);
-                // Look for the movie that matches the imdb ID (e.g., "tt10916120")
-                const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
+                const movie = movies.find(m => m.id === einthusan_id);
                 if (movie) {
-                    mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
+                    mappedEinthusanId = movie.EinthusanID;
                     console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
                 }
             }
+
             if (mappedEinthusanId) {
-                einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
+                einthusan_id = mappedEinthusanId;
             } else {
-                // Fall back to the existing logic if no mapping found
                 const imdbTitle = await ttnumberToTitle(einthusan_id);
                 if (!imdbTitle) return;
-                // Get Einthusan ID for this title and language
                 einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
@@ -431,24 +404,28 @@ async function stream(einthusan_id, lang) {
             einthusan_id = einthusan_id.replace("einthusan_", "");
             //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
+
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-        const response = await requestQueue.add(() => client.get(url));
+        const response = await requestQueue.add(() => client.get(url)).catch((err) => {
+            throw new Error(`Failed to fetch movie details: ${err.message}`);
+        });
+
         const $ = cheerio.load(response.data);
         const videoSection = $('#UIVideoPlayer');
         if (!videoSection.length) throw new Error(`Video player section not found using URL: ${url}`);
+
         title = videoSection.attr("data-content-title");
         const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
         const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
 
         if (!mp4Link) throw new Error("No video source found");
 
-        // Check if the language is valid for the current einthusan_id
         const languageCheck = $('#UIMovieSummary div.info p').text().toLowerCase();
         if (!languageCheck.includes(lang.toLowerCase())) {
             throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
         }
 
-        validEinthusanId = true; // Set this to true if the language matches
+        validEinthusanId = true;
 
         const capitalizedLang = capitalizeFirstLetter(lang);
         const result = {
@@ -461,10 +438,8 @@ async function stream(einthusan_id, lang) {
 
         console.info(`${useColors ? '\x1b[32m' : ''}Stream Fetched Successfully For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${title}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${year})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[31m' : ''}(EinthusanID: ${einthusan_id} and imdbID: ${imdb})${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}In Language:${useColors ? '\x1b[0m' : ''} ${capitalizedLang}`);
 
-        // Cache result for the specific combination of einthusan_id and lang
-        cache.set(cacheKey, compressData(result), 3600); // Cache for 1 hour with compressed data
+        cache.set(cacheKey, compressData(result), 3600);
         return result;
-
     } catch (err) {
         // Handle specific and general errors
         if (err.message.includes("Einthusan ID could not be retrieved") || err.message.includes("is not valid for the language")) {
@@ -474,8 +449,6 @@ async function stream(einthusan_id, lang) {
         }
     }
 }
-
-
 
 async function search(lang, slug) {
     if (!lang || !slug) {
@@ -497,7 +470,9 @@ async function search(lang, slug) {
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
     try {
-        const response = await requestQueue.add(() => client.get(url));
+        const response = await requestQueue.add(() => client.get(url)).catch((err) => {
+            throw new Error(`Failed to fetch catalog results: ${err.message}`);
+        });
         const html = parse(response.data);
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
 
@@ -591,25 +566,24 @@ async function getcatalogresults(url) {
 
 // Optimized function to get Einthusan ID by title
 async function getEinthusanIdByTitle(title, lang, ttnumber) {
-    // Check if lang is undefined
     if (typeof lang === 'undefined') {
         console.error("Error: 'lang' parameter is undefined.");
-        return; // Exit the function early
+        return;
     }
 
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
-    
+
     try {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
-        const results = await getcatalogresults(url);
+        const results = await getcatalogresults(url).catch((err) => {
+            throw new Error(`Failed to fetch catalog results: ${err.message}`);
+        });
 
-        // Check if results is an array
         if (!Array.isArray(results)) {
             throw new Error("Invalid results structure received from getcatalogresults.");
         }
 
-        // If ttnumber is provided, search for it in the results
         if (ttnumber) {
             const matchByTTNumber = results.find(movie => movie.id === ttnumber);
             if (matchByTTNumber) {
@@ -621,7 +595,6 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
             //throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
         }
 
-        // If no ttnumber is provided, proceed with the title search
         const normalizedSearchTitle = normalizeTitle(title);
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
         
@@ -789,11 +762,6 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
     }
 }
 
-// Error handler for uncaught promises
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Promise Rejection:', err);
-});
-
 async function meta(einthusan_id, lang) {
     try {
         const originalId = einthusan_id;
@@ -846,7 +814,9 @@ async function meta(einthusan_id, lang) {
         }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-        const response = await requestQueue.add(() => client.get(url));
+        const response = await requestQueue.add(() => client.get(url)).catch((err) => {
+            throw new Error(`Failed to fetch movie metadata: ${err.message}`);
+        });
         const html = parse(response.data);
 
         const movieSummary = html.querySelector("#UIMovieSummary")?.querySelector("li");
