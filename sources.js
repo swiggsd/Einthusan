@@ -298,6 +298,7 @@ async function getImdbId(title, year) {
 // Create a promise cache
 const promiseCache = new Map();
 
+
 async function ttnumberToTitle(ttNumber, retries = 5) {
     const ttNumberRegex = /^tt\d{7,8}$/;
     if (!ttNumberRegex.test(ttNumber)) {
@@ -318,32 +319,38 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
     const fetchPromise = (async () => {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
-                const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch(async (err) => {
-                    // Handle 429 Too Many Requests error
-                    if (err.response && err.response.status === 429) {
-                        const retryAfter = err.response.headers['retry-after'] || 5; // Default to 5 seconds if header is missing
-                        console.warn(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
-                        await sleep(retryAfter * 1000); // Convert seconds to milliseconds
-                        throw err; // Retry the request
-                    }
-                    throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
+                // Fetch from IMDb with a valid User-Agent header
+                const imdbUrl = `https://www.imdb.com/title/${ttNumber}/`;
+                const imdbResponse = await axios.get(imdbUrl, {
+                    timeout: 10000,
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    },
                 });
 
-                const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-                const title = movie ? movie.l : null;
+                const $ = cheerio.load(imdbResponse.data);
+                const imdbTitle = $('title').text();
 
-                if (title) {
-                    //console.info(`Fetched Title: "${title}" For IMDb ID: ${ttNumber}`);
-                    cache.set(cacheKey, compressData(title));
+                if (imdbTitle) {
+                    const cleanedTitle = imdbTitle.replace(/ \(.*\)/, '').split('IMDb')[0].replace(/\s*-+\s*$/, '').trim();
+                    console.info(`Fetched Title from IMDb: "${cleanedTitle}" For IMDb ID: ${ttNumber}`);
+                    cache.set(cacheKey, compressData(cleanedTitle));
+                    return cleanedTitle;
                 }
-                return title;
+
+                throw new Error('No title found on IMDb');
             } catch (err) {
+                if (err.response && err.response.status === 403) {
+                    console.warn('Access forbidden (403). Retrying with a delay...');
+                } else {
+                    console.warn(`Attempt ${attempt} failed. Error: ${err.message}`);
+                }
+
                 if (attempt < retries) {
-                    console.warn(`Attempt ${attempt} failed. Retrying...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
-                    console.error('Error Fetching Title From IMDb Suggestions API For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
+                    console.error('Error Fetching Title For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
+                    throw new Error(`Failed to fetch title after ${retries} attempts: ${err.message}`);
                 }
             }
         }
