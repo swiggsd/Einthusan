@@ -304,71 +304,55 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
         throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
     }
 
-    const cacheKey = `title_${ttNumber}`;
     if (promiseCache.has(ttNumber)) {
         return promiseCache.get(ttNumber);
-    }
-
-    const cachedTitle = cache.get(cacheKey);
-    if (cachedTitle) {
-        const title = decompressData(cachedTitle);
-        return title;
     }
 
     const fetchPromise = (async () => {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
-                // Try IMDb Suggestions API first
-                const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
-                const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch(async (err) => {
-                    // Handle 429 Too Many Requests error
-                    if (err.response && err.response.status === 429) {
-                        const retryAfter = err.response.headers['retry-after'] || 5; // Default to 5 seconds if header is missing
-                        console.warn(`Rate limit exceeded. Retrying after ${retryAfter} seconds...`);
-                        await sleep(retryAfter * 1000); // Convert seconds to milliseconds
-                        throw err; // Retry the request
+                // Try IMDb API first
+                let title;
+                try {
+                    title = await fetchFromIMDbApi(ttNumber);
+                    if (title) {
+                        //console.info(`Fetched Title from IMDb API: "${title}" For IMDb ID: ${ttNumber}`);
+                        return title;
                     }
-                    throw new Error(`Failed to fetch title from IMDb API: ${err.message}`);
-                });
-
-                const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-                const title = movie ? movie.l : null;
-
-                if (title) {
-                    console.info(`Fetched Title from IMDb API: "${title}" For IMDb ID: ${ttNumber}`);
-                    cache.set(cacheKey, compressData(title));
-                    return title;
+                } catch (imdbErr) {
+                    console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
                 }
 
-                // If IMDb API fails, fallback to scraping the IMDb page
-                console.warn(`IMDb API did not return a title. Falling back to IMDb page for IMDb ID: ${ttNumber}`);
-                const imdbUrl = `https://www.imdb.com/title/${ttNumber}/`;
-                const imdbPageResponse = await axios.get(imdbUrl, {
-                    timeout: 10000,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    },
-                });
-
-
-                const $ = cheerio.load(imdbPageResponse.data);
-                const imdbTitle = $('title').text();
-
-                if (imdbTitle) {
-                    // Clean the title in a single line
-                    const cleanedTitle = imdbTitle.replace(/ \(.*\)/, '').split('IMDb')[0].replace(/\s*-+\s*$/, '').trim();
-                    console.info(`Fetched Title from IMDb Page: "${cleanedTitle}" For IMDb ID: ${ttNumber}`);
-                    cache.set(cacheKey, compressData(cleanedTitle));
-                    return cleanedTitle;
+                // If IMDb API fails, try Cinemeta API
+                try {
+                    title = await fetchFromCinemeta(ttNumber);
+                    if (title) {
+                        //console.info(`Fetched Title from Cinemeta: "${title}" For IMDb ID: ${ttNumber}`);
+                        return title;
+                    }
+                } catch (cinemetaErr) {
+                    console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
                 }
 
-                throw new Error('No title found on IMDb API or IMDb page');
+                // If Cinemeta API fails, try IMDb Page Scraping
+                try {
+                    title = await fetchFromIMDbPage(ttNumber);
+                    if (title) {
+                        //console.info(`Fetched Title from IMDb Page: "${title}" For IMDb ID: ${ttNumber}`);
+                        return title;
+                    }
+                } catch (imdbPageErr) {
+                    console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
+                }
+
+                // If all sources fail, throw an error to trigger the retry mechanism
+                throw new Error('No title found on IMDb API, Cinemeta, or IMDb Page');
             } catch (err) {
                 if (attempt < retries) {
-                    console.warn(`Attempt ${attempt} failed. Retrying...`);
+                    console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
-                    console.error('Error Fetching Title For IMDb ID: %s. Error Message: %s', ttNumber, err.message);
+                    console.warn(`Failed to fetch title after ${retries} attempts: ${err.message}`);
                     throw new Error(`Failed to fetch title after ${retries} attempts: ${err.message}`);
                 }
             }
@@ -381,6 +365,60 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
     });
 
     return fetchPromise;
+}
+
+async function fetchFromIMDbApi(ttNumber) {
+    const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
+    try {
+        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
+        const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
+        if (movie && movie.l) {
+            return movie.l;
+        }
+    } catch (err) {
+        throw new Error(`IMDb API failed: ${err.message}`);
+    }
+    return null;
+}
+
+async function fetchFromCinemeta(ttNumber) {
+    const cinemetaApiUrl = `https://v3-cinemeta.strem.io/meta/movie/${ttNumber}.json`;
+    try {
+        const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 });
+        const title = cinemetaResponse.data.meta?.name;
+        if (title) {
+            return title;
+        }
+    } catch (err) {
+        throw new Error(`Cinemeta API failed: ${err.message}`);
+    }
+    return null;
+}
+
+async function fetchFromIMDbPage(ttNumber) {
+    const imdbUrl = `https://www.imdb.com/title/${ttNumber}/`;
+    try {
+        const imdbPageResponse = await axios.get(imdbUrl, {
+            timeout: 10000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            },
+        });
+        const $ = cheerio.load(imdbPageResponse.data);
+        const imdbTitle = $('title').text();
+        if (imdbTitle) {
+            // Clean the title in a single line
+            const cleanedTitle = imdbTitle
+                .replace(/ \(.*\)/, '') // Remove parentheses and their contents
+                .split('IMDb')[0] // Remove everything after "IMDb"
+                .replace(/\s*-+\s*$/, '') // Remove trailing hyphens and spaces
+                .trim(); // Trim any remaining whitespace
+            return cleanedTitle;
+        }
+    } catch (err) {
+        throw new Error(`IMDb Page Scraping failed: ${err.message}`);
+    }
+    return null;
 }
 
 // Optimized IP replacement
