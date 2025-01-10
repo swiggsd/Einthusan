@@ -24,16 +24,44 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         const results = {};
         await Promise.all(config.langs.map(async (lang) => {
-            const movies = await getAllRecentMovies(maxPages, lang, false);
-            results[lang] = movies;
+            const cacheKey = `recent_movies_${lang}_${maxPages}`;
+            const cached = cache.get(cacheKey);
+
+            if (cached) {
+                // Cache exists: fetch only the first page to check for new movies
+                const cachedMovies = decompressData(cached);
+                const newMovies = await fetchPage(1, lang); // Fetch the first page
+
+                // Check if there are any new movies not in the cache
+                const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
+
+                if (updatedMovies.length > 0) {
+                    // Prepend new movies to the cached results
+                    const updatedCache = updatedMovies.concat(cachedMovies);
+
+                    // Update the cache with the new list of movies and set expiry to 1 week (604,800 seconds)
+                    cache.set(cacheKey, compressData(updatedCache), 604800);
+
+                    // Log when new movies are added to the cache
+                    console.info(`${useColors ? '\x1b[33m' : ''}Added ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${updatedMovies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} New Movies To Cache For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
+                }
+
+                results[lang] = cachedMovies;
+            } else {
+                // Cache does not exist: fetch all pages to create the cache
+                const movies = await getAllRecentMovies(maxPages, lang, false);
+                results[lang] = movies;
+            }
         })).catch((error) => {
             console.error("Error fetching movies for all languages:", error);
         });
+
         // Final summary log
         console.info(`\n${useColors ? '\x1b[1m\x1b[33m' : ''}=== Final Summary ===${useColors ? '\x1b[0m' : ''}`);
         for (const [lang, movies] of Object.entries(results)) {
-            console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[32m' : ''}${movies.length}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
+            console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${movies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
         }
+
         return results;
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
@@ -835,7 +863,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = false) {
             console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${results.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
         }
 
-        cache.set(cacheKey, compressData(results), 43200);
+        cache.set(cacheKey, compressData(results), 604800);
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
