@@ -443,7 +443,7 @@ async function stream(einthusan_id, lang) {
     if (cached) {
         const cachedResult = decompressData(cached);
         const cachedTitle = cachedResult.streams[0].title;
-        console.info(`${useColors ? '\x1b[32m' : ''}Cache Hit For Stream:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${cachedTitle}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${einthusan_id})${useColors ? '\x1b[0m' : ''}`);
+        console.info(`${useColors ? '\x1b[32m' : ''}Cache Hit For Stream:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${cachedTitle.replace(/\n/g, ' ')}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}(${einthusan_id})${useColors ? '\x1b[0m' : ''}`);
         return cachedResult;
     }
 
@@ -601,23 +601,8 @@ async function getcatalogresults(url) {
                 const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                 const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
-                // Determine poster URL
-                let posterUrl = img.startsWith('http') ? img : `https:${img}`;
-
-                // Check RatingPosterDB API if IMDb ID is valid
-                if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
-                    const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
-
-                    try {
-                        // Check if the RatingPosterDB URL is valid
-                        const response = await fetch(apiUrl, { method: 'HEAD' });
-                        if (response.ok) {
-                            posterUrl = apiUrl; // Use RatingPosterDB URL if valid
-                        }
-                    } catch (error) {
-                        //console.error(`Error checking RatingPosterDB for ${title}:`, error);
-                    }
-                }
+                // Use the poster URL as is (no RPDB logic)
+                const posterUrl = img.startsWith('http') ? img : `https:${img}`;
 
                 // Construct metadata object
                 return {
@@ -625,7 +610,7 @@ async function getcatalogresults(url) {
                     EinthusanID: einthusanId,
                     type: "movie",
                     name: title,
-                    poster: posterUrl, // Use the updated poster URL
+                    poster: posterUrl, // Use the poster URL as is
                     releaseInfo: year,
                     description,
                     trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
@@ -706,12 +691,12 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
 }
 
 // Optimized function to get all recent movies with parallel processing
-async function getAllRecentMovies(maxPages, lang, logSummary = true) {
+async function getAllRecentMovies(maxPages, lang, logSummary = false) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
     const cached = cache.get(cacheKey);
     if (cached) {
         if (logSummary) {
-            //console.log(`${useColors ? '\x1b[32m' : ''}Cache Hit For Recent Movies:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}, ${useColors ? '\x1b[33m' : ''}Max Pages:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
+            console.log(`${useColors ? '\x1b[32m' : ''}Cache Hit For Recent Movies:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}, ${useColors ? '\x1b[33m' : ''}Max Pages:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
         }
         return decompressData(cached);
     }
@@ -784,20 +769,8 @@ async function getAllRecentMovies(maxPages, lang, logSummary = true) {
                             const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
                             const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
 
-                            let posterUrl = img.startsWith('http') ? img : `https:${img}`;
-
-                            if (process.env.RATING_POSTER_DB_TOKEN && imdbId && /^tt\d+$/.test(imdbId)) {
-                                const apiUrl = `https://api.ratingposterdb.com/${process.env.RATING_POSTER_DB_TOKEN}/imdb/poster-default/${imdbId}.jpg`;
-
-                                try {
-                                    const response = await fetch(apiUrl, { method: 'HEAD' });
-                                    if (response.ok) {
-                                        posterUrl = apiUrl;
-                                    }
-                                } catch (error) {
-                                    //console.error(`Error checking RatingPosterDB for ${title}:`, error);
-                                }
-                            }
+                            // Use the poster URL as is (no RPDB logic)
+                            const posterUrl = img.startsWith('http') ? img : `https:${img}`;
 
                             return {
                                 id: finalId,

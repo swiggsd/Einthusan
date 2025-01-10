@@ -1,15 +1,13 @@
 <template>
     <div>
-
-        <!-- install Modal -->
-        <div id="installModal" ref='installModal' tabindex="-1" aria-hidden="true"
+        <!-- Install Modal -->
+        <div id="installModal" ref="installModal" tabindex="-1" aria-hidden="true"
             class="hidden overflow-y-auto overflow-x-hidden fixed top-0 right-0 left-0 z-50 w-full md:inset-0 h-modal md:h-full justify-center items-center">
             <div class="relative p-4 w-full max-w-2xl h-full md:h-auto">
                 <!-- Modal content -->
                 <div class="relative bg-white rounded-lg shadow dark:bg-gray-700">
                     <!-- Modal header -->
                     <div class="modal-header">
-
                         <div class="flex justify-between items-start p-4 rounded-t border-b dark:border-gray-600">
                             <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
                                 Install the addon
@@ -38,7 +36,7 @@
                                 <p>Buymeacoffee.com</p>
                                 <a href='https://www.buymeacoffee.com/asaddon' target='_blank'><img
                                         src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=asaddon&button_colour=FF5F5F&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00" /></a>
-                           </div>
+                            </div>
                             <div style="margin: auto">
                                 <p>Ko-fi.com</p>
                                 <a href='https://ko-fi.com/W7W2166YEP' target='_blank'><img height='36'
@@ -62,13 +60,11 @@
             </div>
         </div>
 
-
+        <!-- Main Content -->
         <div class="bg-img relative min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 bg-gray-500 bg-no-repeat bg-cover bg-center relative items-center"
             :style="`background-image: url(${manifest.background});`">
             <div class="absolute bg-black opacity-60 inset-0 z-0"></div>
             <div class="max-w-md w-full space-y-8 p-10 bg-white shadow-lg rounded-xl z-10">
-
-
                 <div class="grid gap-8 grid-cols-1">
                     <div class="flex flex-col ">
                         <div class="items-center header">
@@ -88,13 +84,15 @@
                                 <li>Show Recently Added Movies Catalog</li>
                             </ul>
                         </div>
-                       
+
                         <div class="items-center mt-5 description">
                             <h2 class="font-semibold text-lg mr-auto">Note:</h2>
                             <ul>
                                 <li>To use multiple languages, simply re-add the addon with each desired language.</li>
                             </ul>
                         </div>
+
+                        <!-- Language Selection -->
                         <div class="mt-5">
                             <label for="Input"
                                 class="mb-2 text-sm font-medium text-gray-900 sr-only dark:text-gray-300">Search
@@ -108,7 +106,19 @@
                                 </select>
                             </div>
                         </div>
-                      
+
+                        <!-- RPDB Key Input -->
+                        <div class="mt-5">
+                            <small><b>RPDB key:</b> <a href="https://ratingposterdb.com/api-key/" target="_blank"
+                                    class="text-xs font-semibold text-gray-600 py-2">RPDB API (?)</a></small>
+
+                            <div class="relative flex">
+                                <input v-model="state.RPDBkey.key" id="RPDB"
+                                    class="block p-4 pl-10 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                                    placeholder="Paste RPDB API Key (optional)">
+                            </div>
+                        </div>
+
                         <div class="flex items-center justify-center space-x-2 mt-10">
                             <span class="h-px w-full bg-gray-200"></span>
                         </div>
@@ -123,7 +133,8 @@
                             <span class="h-px w-full bg-gray-200"></span>
                         </div>
 
-                        <div class="mt-10 flex flex-col"><button :disabled='state.isDisabled'
+                        <div class="mt-10 flex flex-col">
+                            <button :disabled='state.isDisabled'
                                 @click="state.install.show(); methods.generateInstallUrl();" type="button"
                                 class="text-white bg-blue-700 hover:bg-blue-800 focus:outline-none focus:ring-4 focus:ring-blue-300 font-medium rounded-full text-sm px-5 py-2.5 text-center mr-2 mb-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">Install
                                 Addon</button>
@@ -134,13 +145,12 @@
                         </div>
 
                         <div class="flex flex-col mt-5" style="align-items: center;">
-                        <p class="text-center">This addon was recreated by:
-                        <a href="https://github.com/asaddon" target="_blank" class="text-purple-700"><b style="font-weight: 600;">asaddon</b></a><br /></p>
-                        <p class="text-center">Orignally By:
-                        <a href="https://github.com/dexter21767/" target="_blank" class="text-purple-700"><b style="font-weight: 600;">dexter21767</b></a><br />   
+                            <p class="text-center">This addon was recreated by:
+                                <a href="https://github.com/asaddon" target="_blank" class="text-purple-700"><b style="font-weight: 600;">asaddon</b></a><br /></p>
+                            <p class="text-center">Orignally By:
+                                <a href="https://github.com/dexter21767/" target="_blank" class="text-purple-700"><b style="font-weight: 600;">dexter21767</b></a><br />
                                 UI by:
-                                <a href="https://github.com/rleroi" target="_blank" class="text-purple-700"><b
-                                style="font-weight: 600;">rab1t</b></a><br />
+                                <a href="https://github.com/rleroi" target="_blank" class="text-purple-700"><b style="font-weight: 600;">rab1t</b></a><br />
                                 Background by:
                                 <b class="text-purple-700" style="font-weight: 600;">Ahlen Ken A. Batalon</b>.
                             </p>
@@ -167,14 +177,16 @@ useHead({
             href: "https://einthusan.tv/etc/favicon-16x16.png",
         }
     ],
-})
-
+});
 
 const state = reactive({
     languages: ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"],
     install: null,
     Language: '',
     isDisabled: true,
+    RPDBkey: {
+        key: null, // RPDB API key
+    }
 });
 
 const installModal = ref();
@@ -185,22 +197,17 @@ const methods = {
         this.generateInstallUrl();
     },
     generateInstallUrl() {
-        const configuration = state.Language ? '/' + state.Language : '';
-        const location = window.location.host + configuration + '/manifest.json'
-        document.getElementById("install_button").href = 'stremio://' + location;
-    }
+    const configuration = state.Language ? '/' + state.Language : '';
+    const rpdbConfig = state.RPDBkey.key ? `/${state.RPDBkey.key}` : ''; // Add RPDB key
+    const location = window.location.host + rpdbConfig + configuration + '/manifest.json';
+    document.getElementById("install_button").href = 'stremio://' + location;
 }
+};
 
 onMounted(() => {
     state.install = new Modal(installModal.value);
 });
-
-
-
-
-
 </script>
-
 
 <style scoped>
 h1 {

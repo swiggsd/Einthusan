@@ -13,6 +13,7 @@ const rateLimit = require('express-rate-limit');
 process.on('unhandledRejection', (err) => {
     console.error('Unhandled Promise Rejection:', err);
 });
+
 // Create a global rate limiter
 const globalLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -23,6 +24,7 @@ const globalLimiter = rateLimit({
         return req.user ? req.user.id : req.ip; // Adjust as necessary
     },
 });
+
 // Apply the rate limiter globally
 app.use(globalLimiter);
 
@@ -58,11 +60,12 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
 }
 
 app.set('trust proxy', true);
+
 // Middleware for Swagger Stats
 app.use(swStats.getMiddleware({
     name: manifest.name,
     version: manifest.version,
-    uriPath: '/stats', 
+    uriPath: '/stats',
     authentication: true,
     onAuthenticate: (req, username, password) => {
         const User = process.env.API_USER;
@@ -71,10 +74,9 @@ app.use(swStats.getMiddleware({
     }
 }));
 
-
 // Timeout middleware
 app.use((req, res, next) => {
-    req.setTimeout(120 * 1000); // Set timeout to 40 seconds
+    req.setTimeout(120 * 1000); // Set timeout to 120 seconds
     req.socket.removeAllListeners('timeout');
     req.socket.once('timeout', () => {
         req.timedout = true;
@@ -109,36 +111,60 @@ app.get('/manifest.json', (_, res) => {
     return res.json(manifest);
 });
 
+async function updatePosterUrls(metas, rpdbKey) {
+    if (!metas || !Array.isArray(metas) || !rpdbKey) return metas;
+
+    for (const meta of metas) {
+        if (meta.id && /^tt\d+$/.test(meta.id)) {
+            const imdbId = meta.id; // IMDb ID (e.g., tt1234567)
+            // Use the RatingPosterDB URL with fallback=true
+            meta.poster = `https://api.ratingposterdb.com/${rpdbKey}/imdb/poster-default/${imdbId}.jpg?fallback=true`;
+        }
+    }
+
+    return metas;
+}
+
 // Utility function to capitalize the first letter
 function capitalizeFirstLetter(string) {
     if (!string) return ''; // Handle empty strings
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
-app.get('/:configuration/manifest.json', (req, res) => {
-    const { configuration } = req.params;
+
+// Serve manifest.json with optional RPDB key
+app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
+    const { rpdbKey, configuration } = req.params; // Extract path parameters
+
     setCommonHeaders(res);
 
-        if (config.langs.includes(configuration)) {
+    if (config.langs.includes(configuration)) {
         manifest.behaviorHints.configurationRequired = false;
-        // Create a copy of the original manifest to modify
         const localizedManifest = { ...manifest };
         localizedManifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
         localizedManifest.catalogs = [
             {
-                // Catalog with search (requires search to show)
                 type: "movie",
                 id: configuration,
                 name: `EinthusanTV - Search - ${capitalizeFirstLetter(configuration)}`,
-                extra: [{ name: "search", isRequired: true }] // Requires search query
+                extra: [{ name: "search", isRequired: true }]
             },
             {
-                // Catalog without search (always visible)
                 type: "movie",
                 id: `${configuration}_board`,
                 name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`,
-                extra: [] // No search parameter required
+                extra: []
             }
         ];
+
+        // Use the RPDB key if provided
+        if (rpdbKey) {
+            console.log("RPDB Key:", rpdbKey);
+            // Add logic to use the RPDB key
+        } else {
+            console.log("No RPDB key provided.");
+            // Add logic for when no RPDB key is provided
+        }
+
         return res.json(localizedManifest);
     }
     return res.status(400).send({ error: "Invalid configuration" });
@@ -150,29 +176,32 @@ const setCommonHeaders = (res) => {
     res.setHeader('Content-Type', 'application/json');
 };
 
-// Handle catalog requests
-app.get('/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
+// Handle catalog requests with optional RPDB key
+app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     setCommonHeaders(res);
     try {
-        const { id, extra, configuration } = req.params;
+        const { rpdbKey, configuration, id, extra } = req.params;
+
         let metas;
-        // Validate the catalog ID
-        const catalogId = config.langs.includes(id) ? id : id.split('_')[0]; 
+        const catalogId = config.langs.includes(id) ? id : id.split('_')[0];
         if (!config.langs.includes(catalogId)) {
             return res.status(400).send({ error: "Invalid catalog ID" });
         }
 
-        // Parse extra parameters
         const searchParams = extra ? new URLSearchParams(extra) : null;
 
-        // Handle search if applicable
         if (searchParams && searchParams.has("search")) {
             metas = await sources.search(catalogId, searchParams.get("search"));
+            //console.log(metas);
         }
 
-        // If no metas found, get recent movies
         if (!metas) {
             metas = await sources.getAllRecentMovies(15, configuration);
+        }
+
+        // Update poster URLs for IMDb IDs using the helper function
+        if (metas && Array.isArray(metas) && rpdbKey) {
+            metas = await updatePosterUrls(metas, rpdbKey);
         }
 
         return res.json({ metas });
@@ -182,11 +211,12 @@ app.get('/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     }
 });
 
-// Handle movie stream requests
-app.get('/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
+// Handle movie stream requests with optional RPDB key
+app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     setCommonHeaders(res);
     try {
-        const { id, configuration } = req.params;
+        const { rpdbKey, configuration, id } = req.params;
+
         let streams;
         if (id.startsWith("einthusan") || id.startsWith("tt")) {
             streams = await sources.stream(id, configuration);
@@ -199,11 +229,12 @@ app.get('/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     }
 });
 
-
-app.get('/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
+// Handle movie meta requests with optional RPDB key
+app.get('/:rpdbKey?/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
     setCommonHeaders(res);
     try {
-        const { id, configuration } = req.params;
+        const { rpdbKey, configuration, id } = req.params;
+
         let meta;
         if (id.startsWith("einthusan") || id.startsWith("tt")) {
             meta = await sources.meta(id, configuration);
