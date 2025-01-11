@@ -28,9 +28,9 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
             const cached = cache.get(cacheKey);
 
             if (cached) {
-                // Cache exists: fetch only the first page to check for new movies
+                // Cache exists: fetch only the first two pages to check for new movies
                 const cachedMovies = decompressData(cached);
-                const newMovies = await fetchPage(1, lang); // Fetch the first page
+                const newMovies = await getAllRecentMovies(2, lang, false); // Fetch only the first 2 pages
 
                 // Check if there are any new movies not in the cache
                 const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
@@ -67,6 +67,8 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
         console.error("Error Fetching Movies For All Languages:", error);
     }
 };
+
+
 const jar = new CookieJar();
 
 // Render Refresh Start
@@ -380,8 +382,8 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                     console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
-                    console.warn(`Failed to fetch title after ${retries} attempts: ${err.message}`);
-                    throw new Error(`Failed to fetch title after ${retries} attempts: ${err.message}`);
+                    console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
+                    throw new Error(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
                 }
             }
         }
@@ -496,9 +498,12 @@ async function stream(einthusan_id, lang) {
             if (mappedEinthusanId) {
                 einthusan_id = mappedEinthusanId;
             } else {
-                const imdbTitle = await ttnumberToTitle(einthusan_id);
+                // Handle ttnumberToTitle promise locally
+                const imdbTitle = await ttnumberToTitle(einthusan_id).catch(() => null);
                 if (!imdbTitle) return;
-                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
+
+                // Handle getEinthusanIdByTitle promise locally
+                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
                 }
@@ -510,6 +515,8 @@ async function stream(einthusan_id, lang) {
         }
 
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
+
+        // Handle requestQueue promise locally
         const response = await requestQueue.add(() => client.get(url)).catch((err) => {
             throw new Error(`Failed to fetch movie details: ${err.message}`);
         });
@@ -547,7 +554,7 @@ async function stream(einthusan_id, lang) {
     } catch (err) {
         // Handle specific and general errors
         if (err.message.includes("Einthusan ID could not be retrieved") || err.message.includes("is not valid for the language")) {
-            // Handle specific case
+            // Handle specific case (suppress logging or take other actions)
         } else {
             console.error("Error in Stream Function:", err.message);
         }
