@@ -112,8 +112,19 @@ app.get('/manifest.json', (_, res) => {
 });
 
 async function updatePosterUrls(metas, rpdbKey) {
+    // Check if metas is valid and rpdbKey is provided
     if (!metas || !Array.isArray(metas) || !rpdbKey) return metas;
 
+    // Validate the RPDB key
+    const isKeyValid = await validateRPDBKey(rpdbKey);
+
+    // If the key is invalid, return the original metas without modifying poster URLs
+    if (!isKeyValid) {
+        console.warn('RPDB key is invalid. Poster URLs will not be updated.');
+        return metas;
+    }
+
+    // If the key is valid, update poster URLs
     for (const meta of metas) {
         if (meta.id && /^tt\d+$/.test(meta.id)) {
             const imdbId = meta.id; // IMDb ID (e.g., tt1234567)
@@ -123,6 +134,18 @@ async function updatePosterUrls(metas, rpdbKey) {
     }
 
     return metas;
+}
+
+// Helper function to validate the RPDB key
+async function validateRPDBKey(rpdbKey) {
+    try {
+        const response = await fetch(`https://api.ratingposterdb.com/${rpdbKey}/isValid`);
+        const data = await response.json();
+        return data?.valid === true; // Return true if the key is valid
+    } catch (e) {
+        console.error('Error validating RPDB key:', e);
+        return false; // Return false if validation fails
+    }
 }
 
 // Utility function to capitalize the first letter
@@ -157,14 +180,7 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
         ];
 
         // Use the RPDB key if provided
-        if (rpdbKey) {
-            console.log("RPDB Key:", rpdbKey);
-            // Add logic to use the RPDB key
-        } else {
-            console.log("No RPDB key provided.");
-            // Add logic for when no RPDB key is provided
-        }
-
+        if (rpdbKey) {console.log("RPDB Key:", rpdbKey);}
         return res.json(localizedManifest);
     }
     return res.status(400).send({ error: "Invalid configuration" });

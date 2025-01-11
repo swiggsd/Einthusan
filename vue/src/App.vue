@@ -82,6 +82,7 @@
                             <h2 class="font-semibold text-lg mr-auto">Extra Features:</h2>
                             <ul>
                                 <li>Show Recently Added Movies Catalog</li>
+                                <li>Rating Poster Database Integration</li>
                             </ul>
                         </div>
 
@@ -107,17 +108,32 @@
                             </div>
                         </div>
 
-                        <!-- RPDB Key Input -->
                         <div class="mt-5">
-                            <small><b>RPDB key:</b> <a href="https://ratingposterdb.com/api-key/" target="_blank"
-                                    class="text-xs font-semibold text-gray-600 py-2">RPDB API (?)</a></small>
+                        <small><b>RPDB key:</b> <a href="https://ratingposterdb.com/api-key/" target="_blank"
+                        class="text-xs font-semibold text-gray-600 py-2">RPDB API (?)</a></small>
 
-                            <div class="relative flex">
-                                <input v-model="state.RPDBkey.key" id="RPDB"
-                                    class="block p-4 pl-10 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
-                                    placeholder="Paste RPDB API Key (optional)">
-                            </div>
+                        <form @submit.prevent="methods.ValidateRPDB">
+                        <div class="relative">
+                        <input v-model="state.RPDBkey.key" id="RPDB"
+                        class="block p-4 pl-10 w-full text-sm text-gray-900 bg-gray-50 rounded-lg border border-gray-300 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white dark:focus:ring-blue-500 dark:focus:border-blue-500"
+                        placeholder="Paste RPDB API Key (optional)" required>
                         </div>
+
+                        <div class="mt-3">
+                        <button type="submit"
+                        class="text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-4 py-2 dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                        Validate Key
+                        </button>
+                        </div>
+
+                    <small v-if="state.RPDBkey.valid !== null" class="block mt-2">
+                    Key is: 
+                    <b v-if="state.RPDBkey.valid" style="color: green;">Valid</b>
+                    <b v-if="!state.RPDBkey.valid" style="color: red;">Invalid</b>
+                    <span v-if="state.RPDBkey.valid">(Tier: {{ state.RPDBkey.tier }})</span>
+                    </small>
+                    </form>
+                    </div>
 
                         <div class="flex items-center justify-center space-x-2 mt-10">
                             <span class="h-px w-full bg-gray-200"></span>
@@ -179,6 +195,7 @@ useHead({
     ],
 });
 
+// Reactive state
 const state = reactive({
     languages: ["hindi", "tamil", "telugu", "malayalam", "kannada", "bengali", "marathi", "punjabi"],
     install: null,
@@ -186,24 +203,55 @@ const state = reactive({
     isDisabled: true,
     RPDBkey: {
         key: null, // RPDB API key
+        valid: null, // Validation status (null, true, false)
+        tier: null // Tier of the key (if valid)
     }
 });
 
+// Ref for the install modal
 const installModal = ref();
 
+// Methods
 const methods = {
     selectLang() {
         state.isDisabled = false;
         this.generateInstallUrl();
     },
+
     generateInstallUrl() {
-    const configuration = state.Language ? '/' + state.Language : '';
-    const rpdbConfig = state.RPDBkey.key ? `/${state.RPDBkey.key}` : ''; // Add RPDB key
-    const location = window.location.host + rpdbConfig + configuration + '/manifest.json';
-    document.getElementById("install_button").href = 'stremio://' + location;
-}
+        const configuration = state.Language ? '/' + state.Language : '';
+        const rpdbConfig = state.RPDBkey.key && state.RPDBkey.valid ? `/${state.RPDBkey.key}` : ''; // Add RPDB key only if valid
+        const location = window.location.host + rpdbConfig + configuration + '/manifest.json';
+        document.getElementById("install_button").href = 'stremio://' + location;
+    },
+
+    async ValidateRPDB() {
+        // Reset validation state
+        state.RPDBkey.valid = null;
+        state.RPDBkey.tier = null;
+
+        try {
+            // Call the RPDB API to validate the key
+            const validate = await fetch(`https://api.ratingposterdb.com/${state.RPDBkey.key}/isValid`);
+            const data = await validate.json();
+
+            // Update validation status based on the API response
+            if (data?.valid) {
+                state.RPDBkey.valid = data.valid;
+                // Extract the tier from the key (assuming the tier is the second character)
+                state.RPDBkey.tier = parseInt(state.RPDBkey.key[1]);
+            } else {
+                state.RPDBkey.valid = false;
+            }
+        } catch (e) {
+            // Handle errors (e.g., network issues or invalid key)
+            console.error('Validation failed:', e);
+            state.RPDBkey.valid = false;
+        }
+    }
 };
 
+// Lifecycle hook
 onMounted(() => {
     state.install = new Modal(installModal.value);
 });
