@@ -276,7 +276,7 @@ async function verifyImdbTitle(title, year) {
         // If no match found
         return null;
     } catch (err) {
-        console.error(`Error in verifyImdbTitle: ${err.message}`);
+        //console.error(`Error in verifyImdbTitle: ${err.message}`);
         return null; // Return null if there is an error
     }
 }
@@ -379,7 +379,7 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                 throw new Error('No title found on IMDb API, Cinemeta, or IMDb Page');
             } catch (err) {
                 if (attempt < retries) {
-                    console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
+                    //console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
                     console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
