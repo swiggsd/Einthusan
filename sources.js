@@ -349,7 +349,7 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                 let title;
                 try {
                     title = await fetchFromIMDbApi(ttNumber).catch((err) => {
-                        console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        //console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
                         return null;
                     });
                     if (title) {
@@ -357,13 +357,13 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                         return title;
                     }
                 } catch (imdbErr) {
-                    console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
+                    //console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
                 }
 
                 // If IMDb API fails, try Cinemeta API
                 try {
                     title = await fetchFromCinemeta(ttNumber).catch((err) => {
-                        console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        //console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
                         return null;
                     });
                     if (title) {
@@ -371,13 +371,13 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                         return title;
                     }
                 } catch (cinemetaErr) {
-                    console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
+                    //console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
                 }
 
                 // If Cinemeta API fails, try IMDb Page Scraping
                 try {
                     title = await fetchFromIMDbPage(ttNumber).catch((err) => {
-                        console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        //console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
                         return null;
                     });
                     if (title) {
@@ -385,17 +385,17 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                         return title;
                     }
                 } catch (imdbPageErr) {
-                    console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
+                    //console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
                 }
 
                 // If all sources fail, throw an error to trigger the retry mechanism
                 throw new Error('No title found on IMDb API, Cinemeta, or IMDb Page');
             } catch (err) {
                 if (attempt < retries) {
-                    console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
+                    //console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
-                    console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
+                    console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts`);
                     throw new Error(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
                 }
             }
