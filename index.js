@@ -180,7 +180,8 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
         ];
 
         // Use the RPDB key if provided
-        if (rpdbKey) {console.log("RPDB Key:", rpdbKey);}
+        if (rpdbKey) {console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)} with RPDB Key:`, rpdbKey);}
+        console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)}`)
         return res.json(localizedManifest);
     }
     return res.status(400).send({ error: "Invalid configuration" });

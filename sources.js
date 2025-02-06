@@ -24,33 +24,37 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         const results = {};
         await Promise.all(config.langs.map(async (lang) => {
-            const cacheKey = `recent_movies_${lang}_${maxPages}`;
-            const cached = cache.get(cacheKey);
-
-            if (cached) {
-                // Cache exists: fetch only the first two pages to check for new movies
-                const cachedMovies = decompressData(cached);
-                const newMovies = await getAllRecentMovies(2, lang, false); // Fetch only the first 2 pages
-
-                // Check if there are any new movies not in the cache
-                const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
-
-                if (updatedMovies.length > 0) {
-                    // Prepend new movies to the cached results
-                    const updatedCache = updatedMovies.concat(cachedMovies);
-
-                    // Update the cache with the new list of movies and set expiry to 1 week (604,800 seconds)
-                    cache.set(cacheKey, compressData(updatedCache), 604800);
-
-                    // Log when new movies are added to the cache
-                    console.info(`${useColors ? '\x1b[33m' : ''}Added ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${updatedMovies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} New Movies To Cache For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
+            try {
+                const cacheKey = `recent_movies_${lang}_${maxPages}`;
+                const cached = cache.get(cacheKey);
+        
+                if (cached) {
+                    // Cache exists: fetch only the first two pages to check for new movies
+                    const cachedMovies = decompressData(cached);
+                    const newMovies = await getAllRecentMovies(2, lang, false); // Fetch only the first 2 pages
+        
+                    // Check if there are any new movies not in the cache
+                    const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
+        
+                    if (updatedMovies.length > 0) {
+                        // Prepend new movies to the cached results
+                        const updatedCache = updatedMovies.concat(cachedMovies);
+        
+                        // Update the cache with the new list of movies and set expiry to 1 week (604,800 seconds)
+                        cache.set(cacheKey, compressData(updatedCache), 604800);
+        
+                        // Log when new movies are added to the cache
+                        console.info(`${useColors ? '\x1b[33m' : ''}Added ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${updatedMovies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} New Movies To Cache For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
+                    }
+        
+                    results[lang] = cachedMovies;
+                } else {
+                    // Cache does not exist: fetch all pages to create the cache
+                    const movies = await getAllRecentMovies(maxPages, lang, false);
+                    results[lang] = movies;
                 }
-
-                results[lang] = cachedMovies;
-            } else {
-                // Cache does not exist: fetch all pages to create the cache
-                const movies = await getAllRecentMovies(maxPages, lang, false);
-                results[lang] = movies;
+            } catch (error) {
+                console.error(`Error fetching movies for language ${lang}:`, error);
             }
         })).catch((error) => {
             console.error("Error fetching movies for all languages:", error);
@@ -344,42 +348,51 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
                 // Try IMDb API first
                 let title;
                 try {
-                    title = await fetchFromIMDbApi(ttNumber);
+                    title = await fetchFromIMDbApi(ttNumber).catch((err) => {
+                        console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        return null;
+                    });
                     if (title) {
                         //console.info(`Fetched Title from IMDb API: "${title}" For IMDb ID: ${ttNumber}`);
                         return title;
                     }
                 } catch (imdbErr) {
-                    //console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
+                    console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
                 }
 
                 // If IMDb API fails, try Cinemeta API
                 try {
-                    title = await fetchFromCinemeta(ttNumber);
+                    title = await fetchFromCinemeta(ttNumber).catch((err) => {
+                        console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        return null;
+                    });
                     if (title) {
                         //console.info(`Fetched Title from Cinemeta: "${title}" For IMDb ID: ${ttNumber}`);
                         return title;
                     }
                 } catch (cinemetaErr) {
-                    //console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
+                    console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
                 }
 
                 // If Cinemeta API fails, try IMDb Page Scraping
                 try {
-                    title = await fetchFromIMDbPage(ttNumber);
+                    title = await fetchFromIMDbPage(ttNumber).catch((err) => {
+                        console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
+                        return null;
+                    });
                     if (title) {
                         //console.info(`Fetched Title from IMDb Page: "${title}" For IMDb ID: ${ttNumber}`);
                         return title;
                     }
                 } catch (imdbPageErr) {
-                    //console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
+                    console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
                 }
 
                 // If all sources fail, throw an error to trigger the retry mechanism
                 throw new Error('No title found on IMDb API, Cinemeta, or IMDb Page');
             } catch (err) {
                 if (attempt < retries) {
-                    //console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
+                    console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
                     await sleep(2000); // Wait 2 seconds before retrying
                 } else {
                     console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
@@ -400,7 +413,9 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
 async function fetchFromIMDbApi(ttNumber) {
     const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
     try {
-        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
+        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch((err) => {
+            throw new Error(`IMDb API failed: ${err.message}`);
+        });
         const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
         if (movie && movie.l) {
             return movie.l;
@@ -414,7 +429,9 @@ async function fetchFromIMDbApi(ttNumber) {
 async function fetchFromCinemeta(ttNumber) {
     const cinemetaApiUrl = `https://v3-cinemeta.strem.io/meta/movie/${ttNumber}.json`;
     try {
-        const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 });
+        const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 }).catch((err) => {
+            throw new Error(`Cinemeta API failed: ${err.message}`);
+        });
         const title = cinemetaResponse.data.meta?.name;
         if (title) {
             return title;
@@ -433,6 +450,8 @@ async function fetchFromIMDbPage(ttNumber) {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             },
+        }).catch((err) => {
+            throw new Error(`IMDb Page Scraping failed: ${err.message}`);
         });
         const $ = cheerio.load(imdbPageResponse.data);
         const imdbTitle = $('title').text();
