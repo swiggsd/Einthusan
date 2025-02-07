@@ -10,9 +10,10 @@ require('dotenv').config();
 const app = express();
 const rateLimit = require('express-rate-limit');
 // Global error handler for unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Promise Rejection:', err);
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
+
 
 // Create a global rate limiter
 const globalLimiter = rateLimit({

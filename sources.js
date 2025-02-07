@@ -31,7 +31,7 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
                 if (cached) {
                     // Cache exists: fetch only the first two pages to check for new movies
                     const cachedMovies = decompressData(cached);
-                    const newMovies = await getAllRecentMovies(2, lang, false); // Fetch only the first 2 pages
+                    const newMovies = await getAllRecentMovies(2, lang, false).catch(() => []);
         
                     // Check if there are any new movies not in the cache
                     const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
@@ -47,11 +47,11 @@ const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
                         console.info(`${useColors ? '\x1b[33m' : ''}Added ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${updatedMovies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} New Movies To Cache For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
                     }
         
-                    results[lang] = cachedMovies;
+                    results[lang] = cachedMovies || []; // Ensure array
                 } else {
                     // Cache does not exist: fetch all pages to create the cache
-                    const movies = await getAllRecentMovies(maxPages, lang, false);
-                    results[lang] = movies;
+                    const movies = await getAllRecentMovies(maxPages, lang, false).catch(() => []);
+                    results[lang] = movies || []; // Ensure array
                 }
             } catch (error) {
                 console.error(`Error fetching movies for language ${lang}:`, error);
@@ -252,10 +252,10 @@ class RequestQueue {
 
 async function verifyImdbTitle(title, year) {
     try {
-        const imdbId = await getImdbId(title, year);
+        const imdbId = await getImdbId(title, year).catch(() => null);
         if (!imdbId) return false;
 
-        const fetchedTitle = await ttnumberToTitle(imdbId);
+        const fetchedTitle = await ttnumberToTitle(imdbId).catch(() => null);
         if (!fetchedTitle) return false;
 
         // Extract the first word from both titles
@@ -589,7 +589,6 @@ async function search(lang, slug) {
     try {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(slug)}`;
         const results = await getcatalogresults(url);
-
         return results;
     } catch (err) {
         console.error("Error in search function:", err.message, { lang, slug });
@@ -635,7 +634,7 @@ async function getcatalogresults(url) {
 
                 let imdbId = ttNumber; // Default to ttNumber
                 if (!imdbId) {
-                    imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
+                    imdbId = await verifyImdbTitle(title, year).catch(() => null); // Fallback to verifyImdbTitle if ttNumber is not available
                 }
 
                 // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
@@ -806,7 +805,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = false) {
 
                             let imdbId = ttNumber; // Default to ttNumber
                             if (!imdbId) {
-                                imdbId = await verifyImdbTitle(title, year); // Fallback to verifyImdbTitle if ttNumber is not available
+                                imdbId = await verifyImdbTitle(title, year).catch(() => null); // Fallback to verifyImdbTitle if ttNumber is not available
                             }
 
                             const finalId = imdbId || `einthusan_${einthusanId}`;
@@ -921,10 +920,10 @@ async function meta(einthusan_id, lang) {
                 einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
             } else {
                 // Fall back to the existing logic if no mapping found
-                const imdbTitle = await ttnumberToTitle(einthusan_id);
+                const imdbTitle = await ttnumberToTitle(einthusan_id).catch(() => null);
                 if (!imdbTitle) return;
                 // Get Einthusan ID for this title and language
-                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id);
+                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);;
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
                 }
