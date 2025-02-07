@@ -1,33 +1,15 @@
 const express = require("express");
 const cors = require('cors');
 const path = require('path');
-const swStats = require('swagger-stats');
-const serveIndex = require('serve-index');
 const sources = require("./sources");
 const config = require('./config');
 const manifest = require("./manifest");
 require('dotenv').config();
 const app = express();
-const rateLimit = require('express-rate-limit');
 // Global error handler for unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
-
-
-// Create a global rate limiter
-const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    message: "Too many requests from this IP, please try again later.", // Custom message
-    keyGenerator: (req, res) => {
-        // Use a custom key, e.g., use a user ID or session ID instead of IP
-        return req.user ? req.user.id : req.ip; // Adjust as necessary
-    },
-});
-
-// Apply the rate limiter globally
-app.use(globalLimiter);
 
 if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
     // If login credentials are set, run the login function first
@@ -61,19 +43,6 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
 }
 
 app.set('trust proxy', true);
-
-// Middleware for Swagger Stats
-app.use(swStats.getMiddleware({
-    name: manifest.name,
-    version: manifest.version,
-    uriPath: '/stats',
-    authentication: true,
-    onAuthenticate: (req, username, password) => {
-        const User = process.env.API_USER;
-        const Pass = process.env.API_PASS;
-        return username === User && password === Pass;
-    }
-}));
 
 // Timeout middleware
 app.use((req, res, next) => {
@@ -181,8 +150,12 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
         ];
 
         // Use the RPDB key if provided
-        if (rpdbKey) {console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)} with RPDB Key:`, rpdbKey);}
-        console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)}`)
+        if (rpdbKey) {
+            console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)} with RPDB Key:`, rpdbKey);
+        } else {
+            console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)}`);
+        }
+        
         return res.json(localizedManifest);
     }
     return res.status(400).send({ error: "Invalid configuration" });
