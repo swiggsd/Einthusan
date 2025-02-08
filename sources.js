@@ -23,54 +23,52 @@ const cache = new NodeCache({
 const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
     try {
         const results = {};
-        await Promise.all(config.langs.map(async (lang) => {
+        const fetchPromises = config.langs.map(async (lang) => {
             try {
                 const cacheKey = `recent_movies_${lang}_${maxPages}`;
                 const cached = cache.get(cacheKey);
-        
                 if (cached) {
-                    // Cache exists: fetch only the first two pages to check for new movies
                     const cachedMovies = decompressData(cached);
-                    const newMovies = await getAllRecentMovies(2, lang, false).catch(() => []);
-        
-                    // Check if there are any new movies not in the cache
-                    const updatedMovies = newMovies.filter(movie => !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID));
-        
-                    if (updatedMovies.length > 0) {
-                        // Prepend new movies to the cached results
-                        const updatedCache = updatedMovies.concat(cachedMovies);
-        
-                        // Update the cache with the new list of movies and set expiry to 1 week (604,800 seconds)
-                        cache.set(cacheKey, compressData(updatedCache), 604800);
-        
-                        // Log when new movies are added to the cache
-                        console.info(`${useColors ? '\x1b[33m' : ''}Added ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${updatedMovies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} New Movies To Cache For Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
+                    let newMovies = [];
+                    try {
+                        newMovies = await getAllRecentMovies(2, lang, false);
+                    } catch (error) {
+                        console.error(`Error fetching new movies for ${lang}:`, error);
                     }
-        
-                    results[lang] = cachedMovies || []; // Ensure array
+                    const updatedMovies = newMovies.filter(movie => 
+                        !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID)
+                    );
+
+                    if (updatedMovies.length > 0) {
+                        const updatedCache = updatedMovies.concat(cachedMovies);
+                        cache.set(cacheKey, compressData(updatedCache), 604800);
+                        console.info(`Added ${updatedMovies.length} new movies for ${capitalizeFirstLetter(lang)}`);
+                    }
+
+                    results[lang] = cachedMovies || [];
                 } else {
-                    // Cache does not exist: fetch all pages to create the cache
-                    const movies = await getAllRecentMovies(maxPages, lang, false).catch(() => []);
-                    results[lang] = movies || []; // Ensure array
+                    results[lang] = await getAllRecentMovies(maxPages, lang, false);
                 }
             } catch (error) {
                 console.error(`Error fetching movies for language ${lang}:`, error);
+                results[lang] = [];
             }
-        })).catch((error) => {
-            console.error("Error fetching movies for all languages:", error);
         });
 
-        // Final summary log
-        console.info(`\n${useColors ? '\x1b[1m\x1b[33m' : ''}=== Final Summary ===${useColors ? '\x1b[0m' : ''}`);
-        for (const [lang, movies] of Object.entries(results)) {
-            console.info(`${useColors ? '\x1b[33m' : ''}Fetched A Total Of ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[32m' : ''}${movies.length}${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[33m' : ''} Unique Recent Movies In Language: ${useColors ? '\x1b[0m' : ''}${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}`);
-        }
+        await Promise.all(fetchPromises);
+        
+        console.info(`=== Final Summary ===`);
+        Object.entries(results).forEach(([lang, movies]) => {
+            console.info(`Fetched ${movies.length} recent movies in ${capitalizeFirstLetter(lang)}`);
+        });
 
         return results;
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
+        return {};
     }
 };
+
 
 
 const jar = new CookieJar();
@@ -80,12 +78,16 @@ const renderUrl = 'https://einthusantv-k9mh.onrender.com/';
 const interval = 10 * 60 * 1000; // 10 minutes in milliseconds
 const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Karachi', timeZoneName: 'long' };
 
-setInterval(() => {
-  const date = new Date();
-  axios.get(renderUrl)
-    .then(res => console.info(`Reloaded at ${date.toLocaleString('en-US', options)}: Status ${res.status}`))
-    .catch(err => console.error(`Error at ${date.toLocaleString('en-US', options)}: (${err.message})`));
-}, interval);
+setInterval(async () => {
+    try {
+      const date = new Date();
+      const res = await axios.get(renderUrl);
+      console.info(`Reloaded at ${date.toLocaleString('en-US', options)}: Status ${res.status}`);
+    } catch (err) {
+      console.error(`Error at ${date.toLocaleString('en-US', options)}: (${err.message})`);
+    }
+  }, interval);
+  
 // Render Refresh End
 // Compression and Decompression Functions
 const compressData = (data) => {
@@ -116,24 +118,22 @@ async function initializeClientWithSession() {
     const password = process.env.LOGIN_PASSWORD;
 
     if (!email || !password) {
-        throw new Error("Missing credentials. Please set LOGIN_EMAIL and LOGIN_PASSWORD in your .env file.");
+        throw new Error("Missing credentials. Set LOGIN_EMAIL and LOGIN_PASSWORD in .env file.");
     }
 
     try {
-        // Step 1: Fetch the login page
         const loginUrl = "/login/";
-        const loginPageResponse = await client.get(loginUrl).catch((err) => {
+        let loginPageResponse;
+        try {
+            loginPageResponse = await client.get(loginUrl);
+        } catch (err) {
             throw new Error(`Failed to fetch login page: ${err.message}`);
-        });
-
-        // Step 2: Extract the CSRF token
-        const $ = cheerio.load(loginPageResponse.data);
-        const csrfToken = $('html').attr('data-pageid');
-        if (!csrfToken) {
-            throw new Error('CSRF token not found in the login page.');
         }
 
-        // Step 3: Prepare the login payload
+        const $ = cheerio.load(loginPageResponse.data);
+        const csrfToken = $('html').attr('data-pageid');
+        if (!csrfToken) throw new Error('CSRF token not found in the login page.');
+
         const loginPayload = new URLSearchParams({
             xEvent: 'Login',
             xJson: JSON.stringify({ Email: email, Password: password }),
@@ -141,30 +141,30 @@ async function initializeClientWithSession() {
             'gorilla.csrf.Token': csrfToken,
         });
 
-        // Step 4: Send login request
         const ajaxLoginUrl = "/ajax/login/";
-        const loginResponse = await client.post(
-            ajaxLoginUrl,
-            loginPayload.toString(),
-            {
+        let loginResponse;
+        try {
+            loginResponse = await client.post(ajaxLoginUrl, loginPayload.toString(), {
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                     'X-Requested-With': 'XMLHttpRequest',
                     'Origin': 'https://einthusan.tv',
                     'Referer': 'https://einthusan.tv/login/',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'User-Agent': 'Mozilla/5.0',
                 },
-            }
-        ).catch((err) => {
+            });
+        } catch (err) {
             throw new Error(`Login request failed: ${err.message}`);
-        });
+        }
 
-        // Step 5: Handle the login response
         if (loginResponse.data.Event === 'redirect') {
             const accountUrl = loginResponse.data.Data;
-            const accountResponse = await client.get(accountUrl).catch((err) => {
+            let accountResponse;
+            try {
+                accountResponse = await client.get(accountUrl);
+            } catch (err) {
                 throw new Error(`Failed to fetch account page: ${err.message}`);
-            });
+            }
 
             const $account = cheerio.load(accountResponse.data);
             const accountDetails = {
@@ -185,23 +185,26 @@ async function initializeClientWithSession() {
     }
 }
 
+
 // Add retry interceptor
 client.interceptors.response.use(undefined, async (err) => {
     const config = err.config;
     if (!config || !config.retries) return Promise.reject(err);
 
     config.retryCount = config.retryCount ?? 0;
-    if (config.retryCount >= config.retries) {
-        console.error(`Request Failed After ${config.retries} Retries:`, err);
-        return Promise.reject(err);
+    if (config.retryCount >= Math.min(config.retries, 5)) {  // Cap retries at 5
+        console.error(`Request failed after ${config.retryCount} retries:`, err);
+        return Promise.reject(err); // Ensure the error is thrown
     }
 
     config.retryCount += 1;
-    const delay = config.retryDelay(config.retryCount);
-    console.info(`Retrying Request... Attempt ${config.retryCount} After ${delay} ms`);
+    const delay = Math.min(config.retryDelay(config.retryCount) || 1000, 10000);
+    console.info(`Retrying request... Attempt ${config.retryCount} after ${delay} ms`);
     await new Promise(resolve => setTimeout(resolve, delay));
     return client(config);
 });
+
+
 
 // Promisify nameToImdb for better async handling
 const getImdbIdAsync = promisify(nameToImdb);
@@ -333,9 +336,8 @@ async function getImdbId(title, year) {
 const promiseCache = new Map();
 
 async function ttnumberToTitle(ttNumber, retries = 5) {
-    const ttNumberRegex = /^tt\d{7,8}$/;
-    if (!ttNumberRegex.test(ttNumber)) {
-        throw new Error('Invalid IMDb ID format. It should be in the format "tt1234567" or "tt12345678".');
+    if (!/^tt\d{7,8}$/.test(ttNumber)) {
+        throw new Error('Invalid IMDb ID format.');
     }
 
     if (promiseCache.has(ttNumber)) {
@@ -345,101 +347,55 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
     const fetchPromise = (async () => {
         for (let attempt = 1; attempt <= retries; attempt++) {
             try {
-                // Try IMDb API first
-                let title;
-                try {
-                    title = await fetchFromIMDbApi(ttNumber).catch((err) => {
-                        //console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
-                        return null;
-                    });
-                    if (title) {
-                        //console.info(`Fetched Title from IMDb API: "${title}" For IMDb ID: ${ttNumber}`);
-                        return title;
-                    }
-                } catch (imdbErr) {
-                    //console.warn(`IMDb API failed for IMDb ID: ${ttNumber}. Error: ${imdbErr.message}`);
-                }
-
-                // If IMDb API fails, try Cinemeta API
-                try {
-                    title = await fetchFromCinemeta(ttNumber).catch((err) => {
-                        //console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
-                        return null;
-                    });
-                    if (title) {
-                        //console.info(`Fetched Title from Cinemeta: "${title}" For IMDb ID: ${ttNumber}`);
-                        return title;
-                    }
-                } catch (cinemetaErr) {
-                    //console.warn(`Cinemeta API failed for IMDb ID: ${ttNumber}. Error: ${cinemetaErr.message}`);
-                }
-
-                // If Cinemeta API fails, try IMDb Page Scraping
-                try {
-                    title = await fetchFromIMDbPage(ttNumber).catch((err) => {
-                        //console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${err.message}`);
-                        return null;
-                    });
-                    if (title) {
-                        //console.info(`Fetched Title from IMDb Page: "${title}" For IMDb ID: ${ttNumber}`);
-                        return title;
-                    }
-                } catch (imdbPageErr) {
-                    //console.warn(`IMDb Page Scraping failed for IMDb ID: ${ttNumber}. Error: ${imdbPageErr.message}`);
-                }
-
-                // If all sources fail, throw an error to trigger the retry mechanism
+                let title = await fetchFromIMDbApi(ttNumber) || 
+                            await fetchFromCinemeta(ttNumber) || 
+                            await fetchFromIMDbPage(ttNumber);
+                if (title) return title;
                 throw new Error('No title found on IMDb API, Cinemeta, or IMDb Page');
             } catch (err) {
                 if (attempt < retries) {
-                    //console.warn(`Attempt ${attempt} failed. Retrying after 2 seconds...`);
-                    await sleep(2000); // Wait 2 seconds before retrying
+                    await sleep(2000);
                 } else {
                     console.warn(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts`);
-                    throw new Error(`Failed to fetch title for IMDb ID: ${ttNumber} after ${retries} attempts: ${err.message}`);
+                    throw err;
                 }
             }
         }
     })();
 
     promiseCache.set(ttNumber, fetchPromise);
-    fetchPromise.finally(() => {
-        promiseCache.delete(ttNumber);
-    });
 
-    return fetchPromise;
+    return fetchPromise
+        .catch((error) => {
+            console.error(`Failed to fetch title for IMDb ID: ${ttNumber}`, error);
+            promiseCache.delete(ttNumber); // Remove failed promise from cache
+            throw error;
+        })
+        .finally(() => promiseCache.delete(ttNumber)); // Ensure cleanup
 }
+
 
 async function fetchFromIMDbApi(ttNumber) {
     const imdbApiUrl = `https://v2.sg.media-imdb.com/suggestion/t/${ttNumber}.json`;
     try {
-        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 }).catch((err) => {
-            throw new Error(`IMDb API failed: ${err.message}`);
-        });
+        const imdbResponse = await axios.get(imdbApiUrl, { timeout: 10000 });
         const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
-        if (movie && movie.l) {
-            return movie.l;
-        }
+        return movie?.l || null;
     } catch (err) {
-        throw new Error(`IMDb API failed: ${err.message}`);
+        console.warn(`IMDb API failed: ${err.message}`);
+        return null;
     }
-    return null;
 }
 
 async function fetchFromCinemeta(ttNumber) {
     const cinemetaApiUrl = `https://v3-cinemeta.strem.io/meta/movie/${ttNumber}.json`;
     try {
-        const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 }).catch((err) => {
-            throw new Error(`Cinemeta API failed: ${err.message}`);
-        });
-        const title = cinemetaResponse.data.meta?.name;
-        if (title) {
-            return title;
-        }
+        const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 });
+        return cinemetaResponse.data.meta?.name || null;
     } catch (err) {
-        throw new Error(`Cinemeta API failed: ${err.message}`);
+        console.warn(`Cinemeta API failed: ${err.message}`);
+        return null;
     }
-    return null;
 }
 
 async function fetchFromIMDbPage(ttNumber) {
@@ -447,28 +403,17 @@ async function fetchFromIMDbPage(ttNumber) {
     try {
         const imdbPageResponse = await axios.get(imdbUrl, {
             timeout: 10000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            },
-        }).catch((err) => {
-            throw new Error(`IMDb Page Scraping failed: ${err.message}`);
+            headers: { 'User-Agent': 'Mozilla/5.0' },
         });
         const $ = cheerio.load(imdbPageResponse.data);
         const imdbTitle = $('title').text();
-        if (imdbTitle) {
-            // Clean the title in a single line
-            const cleanedTitle = imdbTitle
-                .replace(/ \(.*\)/, '') // Remove parentheses and their contents
-                .split('IMDb')[0] // Remove everything after "IMDb"
-                .replace(/\s*-+\s*$/, '') // Remove trailing hyphens and spaces
-                .trim(); // Trim any remaining whitespace
-            return cleanedTitle;
-        }
+        return imdbTitle ? imdbTitle.replace(/ \(.*\)/, '').split('IMDb')[0].trim() : null;
     } catch (err) {
-        throw new Error(`IMDb Page Scraping failed: ${err.message}`);
+        console.warn(`IMDb Page Scraping failed: ${err.message}`);
+        return null;
     }
-    return null;
 }
+
 
 // Optimized IP replacement
 const replaceIpInLink = (link) => {
@@ -599,147 +544,135 @@ async function search(lang, slug) {
 // Optimized catalog results fetching
 async function getcatalogresults(url) {
     try {
-        const response = await requestQueue.add(() => client.get(url)).catch((err) => {
-            throw new Error(`Failed to fetch catalog results: ${err.message}`);
-        });
+        const response = await requestQueue.add(() => client.get(url));
         const html = parse(response.data);
         const searchResults = html.querySelector("#UIMovieSummary")?.querySelectorAll("li") || [];
 
-        // Process results in batches for better performance
         const batchSize = 10;
         const resultsArray = [];
 
         for (let i = 0; i < searchResults.length; i += batchSize) {
             const batch = searchResults.slice(i, i + batchSize);
             const batchPromises = batch.map(async (item) => {
-                const imgElement = item.querySelector("div.block1 a img");
-                const infoElement = item.querySelector("div.info p");
-                const titleElement = item.querySelector("a.title h3");
-                const idElement = item.querySelector("a.title");
-                const ttElement = item.querySelectorAll("div.extras a")[0]; // Select the first <a> element
-                const synopsisElement = item.querySelector("p.synopsis");
-                const trailerElement = item.querySelectorAll("div.extras a")[1];
+                try {
+                    const imgElement = item.querySelector("div.block1 a img");
+                    const infoElement = item.querySelector("div.info p");
+                    const titleElement = item.querySelector("a.title h3");
+                    const idElement = item.querySelector("a.title");
+                    const ttElement = item.querySelectorAll("div.extras a")[0];
+                    const synopsisElement = item.querySelector("p.synopsis");
+                    const trailerElement = item.querySelectorAll("div.extras a")[1];
 
-                // Handle null or missing elements
-                if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
+                    if (!imgElement || !infoElement || !titleElement || !idElement || !ttElement) return null;
 
-                const img = imgElement.rawAttributes?.src || null;
-                const year = infoElement.childNodes[0]?.rawText.trim() || null;
-                const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
-                const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
-                const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
+                    const img = imgElement.rawAttributes?.src || null;
+                    const year = infoElement.childNodes[0]?.rawText.trim() || null;
+                    const title = titleElement.rawText ? decodeHtmlEntities(titleElement.rawText.trim()) : null;
+                    const einthusanId = idElement.rawAttributes?.href?.split('/')[3] || null;
+                    const ttNumber = ttElement?.rawAttributes['href']?.match(/tt\d+/)?.[0] || null;
 
-                // Skip if required fields are missing
-                if (!img || !year || !title || !einthusanId) return null;
+                    if (!img || !year || !title || !einthusanId) return null;
 
-                let imdbId = ttNumber; // Default to ttNumber
-                if (!imdbId) {
-                    imdbId = await verifyImdbTitle(title, year).catch(() => null); // Fallback to verifyImdbTitle if ttNumber is not available
+                    let imdbId = ttNumber; // Default to ttNumber
+                    if (!imdbId) {
+                        imdbId = await verifyImdbTitle(title, year).catch(() => null);
+                    }
+
+                    const finalId = imdbId || `einthusan_${einthusanId}`;
+
+                    const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
+                    const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
+
+                    const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
+                        const name = prof.querySelector("p")?.rawText.trim() || null;
+                        const role = prof.querySelector("label")?.rawText.trim() || null;
+                        return name && role ? { name, role } : null;
+                    }).filter(Boolean);
+
+                    const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
+                    const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
+
+                    const posterUrl = img.startsWith('http') ? img : `https:${img}`;
+
+                    return {
+                        id: finalId,
+                        EinthusanID: einthusanId,
+                        type: "movie",
+                        name: title,
+                        poster: posterUrl,
+                        releaseInfo: year,
+                        description,
+                        trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
+                        links: [
+                            ...actors.map(actor => ({
+                                name: actor,
+                                category: "Cast",
+                                url: `stremio:///search?search=${encodeURIComponent(actor)}`
+                            })),
+                            ...directors.map(director => ({
+                                name: director,
+                                category: "Directors",
+                                url: `stremio:///search?search=${encodeURIComponent(director)}`
+                            })),
+                        ]
+                    };
+                } catch (err) {
+                    console.error(`Error processing movie on page:`, err.message);
+                    return null; // Skip this movie and continue
                 }
-
-                // If both ttNumber and verifyImdbTitle fail, fallback to einthusan_${einthusanId}
-                const finalId = imdbId || `einthusan_${einthusanId}`;
-
-                // Handle additional metadata
-                const description = synopsisElement ? decodeHtmlEntities(synopsisElement.rawText.trim()) : null;
-                const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
-
-                // Extract cast and roles
-                const castAndRoles = Array.from(item.querySelectorAll("div.prof")).map(prof => {
-                    const name = prof.querySelector("p")?.rawText.trim() || null;
-                    const role = prof.querySelector("label")?.rawText.trim() || null;
-                    return name && role ? { name, role } : null;
-                }).filter(Boolean);
-
-                const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name) || [];
-                const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name) || [];
-
-                // Use the poster URL as is (no RPDB logic)
-                const posterUrl = img.startsWith('http') ? img : `https:${img}`;
-
-                // Construct metadata object
-                return {
-                    id: finalId,
-                    EinthusanID: einthusanId,
-                    type: "movie",
-                    name: title,
-                    poster: posterUrl, // Use the poster URL as is
-                    releaseInfo: year,
-                    description,
-                    trailers: trailer ? [{ source: trailer, type: "Trailer" }] : [],
-                    links: [
-                        ...actors.map(actor => ({
-                            name: actor,
-                            category: "Cast",
-                            url: `stremio:///search?search=${encodeURIComponent(actor)}`
-                        })),
-                        ...directors.map(director => ({
-                            name: director,
-                            category: "Directors",
-                            url: `stremio:///search?search=${encodeURIComponent(director)}`
-                        })),
-                    ]
-                };
             });
 
             const batchResults = await Promise.all(batchPromises);
             resultsArray.push(...batchResults.filter(Boolean));
         }
 
-        if (resultsArray.length) {
-            //console.info(`${useColors ? '\x1b[32m' : ''}Searching For:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('query')}${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[33m' : ''}in Language:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[35m' : ''}${capitalizeFirstLetter(new URL(`${config.BaseURL.replace(/\/+$/, '')}/${url.replace(/^\/+/, '')}`).searchParams.get('lang'))}${useColors ? '\x1b[0m' : ''}`);
-        }
         return resultsArray;
     } catch (err) {
         console.error("Error in GetCatalogResults Function:", err.message);
+        return []; // Return an empty array to avoid crashing
     }
 }
 
 
 // Optimized function to get Einthusan ID by title
 async function getEinthusanIdByTitle(title, lang, ttnumber) {
-    if (typeof lang === 'undefined') {
-        console.error("Error: 'lang' parameter is undefined.");
-        return;
+    if (!title || !lang) {
+        console.error("Error: Missing 'title' or 'lang' parameter.");
+        return null;
     }
 
     const cacheKey = `einthusan_${normalizeTitle(title)}_${lang}`;
     const cached = cache.get(cacheKey);
+    if (cached) return decompressData(cached);
 
     try {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
-        const results = await getcatalogresults(url).catch((err) => {
-            throw new Error(`Failed to fetch catalog results: ${err.message}`);
-        });
-
-        if (!Array.isArray(results)) {
-            throw new Error("Invalid results structure received from getcatalogresults.");
+        const results = await getcatalogresults(url);
+        if (!Array.isArray(results) || results.length === 0) {
+            console.warn(`No results found for "${title}" in language "${lang}".`);
+            return null;
         }
 
         if (ttnumber) {
             const matchByTTNumber = results.find(movie => movie.id === ttnumber);
             if (matchByTTNumber) {
-                //console.log(`Found Einthusan ID: ${matchByTTNumber.EinthusanID} for Movie: ${title} (${ttnumber})`);
-                cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID)); // Cache compressed ID
+                cache.set(cacheKey, compressData(matchByTTNumber.EinthusanID));
                 return matchByTTNumber.EinthusanID;
             }
-            // Move the error throw outside of the if statement
-            //throw new Error(`No match found for for Movie: ${title} (${ttnumber}) in Language: ${capitalizeFirstLetter(lang)}`);
         }
 
         const normalizedSearchTitle = normalizeTitle(title);
         const match = results.find(movie => normalizeTitle(movie.name) === normalizedSearchTitle);
-        
         if (match) {
-            //console.info(`Found Einthusan ID: ${match.EinthusanID} for Title: ${title}`);
-            cache.set(cacheKey, compressData(match.EinthusanID)); // Cache compressed ID
+            cache.set(cacheKey, compressData(match.EinthusanID));
             return match.EinthusanID;
         }
-        
-        //throw new Error(`No match found for Title: ${title}`);
+
+        console.warn(`No exact match found for "${title}" in language "${lang}".`);
+        return null;
     } catch (err) {
-        // Log only the concise error message
-        console.error(err.message); // Only log the error message
+        console.error(`Error in getEinthusanIdByTitle: ${err.message}`);
+        return null;
     }
 }
 
@@ -892,7 +825,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = false) {
         return results;
     } catch (err) {
         console.error("Error in getAllRecentMovies:", err.message);
-        //throw err; // Propagate the error to the caller
+        throw err; // Propagate the error to the caller
     }
 }
 
@@ -902,47 +835,39 @@ async function meta(einthusan_id, lang) {
         let mappedEinthusanId;
 
         if (einthusan_id.startsWith("tt")) {
-            // Check the recent movies cache for a mapping of ttnumber to einthusan_id
-            const cacheKeyForMovies = `recent_movies_${lang}_15`; // Assuming the cache key for recent movies is valid
+            const cacheKeyForMovies = `recent_movies_${lang}_15`;
             const cachedMovies = cache.get(cacheKeyForMovies);
 
             if (cachedMovies) {
                 const movies = decompressData(cachedMovies);
-                // Look for the movie that matches the imdb ID (e.g., "tt10916120")
-                const movie = movies.find(m => m.id === einthusan_id); // Compare with IMDB ID
+                const movie = movies.find(m => m.id === einthusan_id);
                 if (movie) {
-                    mappedEinthusanId = movie.EinthusanID; // Get the Einthusan ID from the cache
-                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+                    mappedEinthusanId = movie.EinthusanID;
                 }
             }
 
             if (mappedEinthusanId) {
-                einthusan_id = mappedEinthusanId; // Use the mapped Einthusan ID
+                einthusan_id = mappedEinthusanId;
             } else {
-                // Fall back to the existing logic if no mapping found
                 const imdbTitle = await ttnumberToTitle(einthusan_id).catch(() => null);
                 if (!imdbTitle) return;
-                // Get Einthusan ID for this title and language
-                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);;
+                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
                 }
             }
         } else {
-            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
             einthusan_id = einthusan_id.replace("einthusan_", "");
-            //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
 
         const cacheKey = einthusan_id.startsWith("tt")
-            ? `tt_${einthusan_id}` // For ttnumber, use tt_<ttnumber>
+            ? `tt_${einthusan_id}`
             : `einthusan_${einthusan_id}`;
         
         const cachedMeta = cache.get(cacheKey);
 
         if (cachedMeta) {
-            // Dynamically set the ID based on the current input
-            const updatedMeta = { ...cachedMeta };  // Clone the cached object to avoid mutation issues
+            const updatedMeta = { ...cachedMeta };
             updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
             return updatedMeta;
         }
@@ -956,7 +881,6 @@ async function meta(einthusan_id, lang) {
         const movieSummary = html.querySelector("#UIMovieSummary")?.querySelector("li");
         if (!movieSummary) throw new Error("Movie summary element not found");
 
-        // Extract metadata elements
         const imgElement = movieSummary.querySelector("div.block1 a img");
         const infoElement = movieSummary.querySelector("div.info p");
         const titleElement = movieSummary.querySelector("a.title h3");
@@ -973,9 +897,8 @@ async function meta(einthusan_id, lang) {
         const title = decodeHtmlEntities(titleElement.rawText.trim());
         const description = decodeHtmlEntities(synopsisElement.rawText.trim());
         const einthusanId = idElement.rawAttributes?.href.split('/')[3];
-        const trailer = trailerElement?.rawAttributes['href'] ?.split("v=")[1] || null;
+        const trailer = trailerElement?.rawAttributes['href']?.split("v=")[1] || null;
 
-        // Extract cast and roles
         const castAndRoles = Array.from(html.querySelectorAll("div.prof")).map(prof => {
             const name = prof.querySelector("p")?.rawText.trim();
             const role = prof.querySelector("label")?.rawText.trim();
@@ -984,7 +907,7 @@ async function meta(einthusan_id, lang) {
 
         const directors = castAndRoles.filter(item => item.role.toLowerCase() === "director").map(item => item.name);
         const actors = castAndRoles.filter(item => !["director", "writer"].includes(item.role.toLowerCase())).map(item => item.name);
-        // Construct metadata object
+
         const metaObj = {
             id: originalId,
             EinthusanID: einthusanId,
@@ -1012,7 +935,8 @@ async function meta(einthusan_id, lang) {
         cache.set(cacheKey, metaObj);
         return metaObj;
     } catch (e) {
-        //console.error("Error in meta function:", e.message);
+        console.error("Error in meta function:", e.message);
+        return null; // Return null to indicate failure
     }
 }
 

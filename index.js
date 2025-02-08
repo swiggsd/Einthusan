@@ -7,8 +7,8 @@ const manifest = require("./manifest");
 require('dotenv').config();
 const app = express();
 // Global error handler for unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Promise Rejection:', err);
 });
 
 if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
@@ -126,9 +126,8 @@ function capitalizeFirstLetter(string) {
 
 // Serve manifest.json with optional RPDB key
 app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
-    const { rpdbKey, configuration } = req.params; // Extract path parameters
-
     setCommonHeaders(res);
+    const { rpdbKey, configuration } = req.params; // Extract path parameters
 
     if (config.langs.includes(configuration)) {
         manifest.behaviorHints.configurationRequired = false;
@@ -145,7 +144,7 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
                 type: "movie",
                 id: `${configuration}_board`,
                 name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`,
-                extra: []
+                extra: [{ name: "skip", isRequired: false }]
             }
         ];
 
@@ -169,8 +168,8 @@ const setCommonHeaders = (res) => {
 
 // Handle catalog requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
-    setCommonHeaders(res);
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id, extra } = req.params;
 
         let metas;
@@ -183,7 +182,6 @@ app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, 
 
         if (searchParams && searchParams.has("search")) {
             metas = await sources.search(catalogId, searchParams.get("search"));
-            //console.log(metas);
         }
 
         if (!metas) {
@@ -204,8 +202,8 @@ app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, 
 
 // Handle movie stream requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
-    setCommonHeaders(res);
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let streams;
@@ -222,8 +220,8 @@ app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, r
 
 // Handle movie meta requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
-    setCommonHeaders(res);
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let meta;
