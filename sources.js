@@ -382,7 +382,7 @@ async function fetchFromIMDbApi(ttNumber) {
         const movie = imdbResponse.data.d.find(item => item.id === ttNumber);
         return movie?.l || null;
     } catch (err) {
-        console.warn(`IMDb API failed: ${err.message}`);
+        //console.warn(`IMDb API failed: ${err.message}`);
         return null;
     }
 }
@@ -393,7 +393,7 @@ async function fetchFromCinemeta(ttNumber) {
         const cinemetaResponse = await axios.get(cinemetaApiUrl, { timeout: 10000 });
         return cinemetaResponse.data.meta?.name || null;
     } catch (err) {
-        console.warn(`Cinemeta API failed: ${err.message}`);
+        //console.warn(`Cinemeta API failed: ${err.message}`);
         return null;
     }
 }
@@ -409,7 +409,7 @@ async function fetchFromIMDbPage(ttNumber) {
         const imdbTitle = $('title').text();
         return imdbTitle ? imdbTitle.replace(/ \(.*\)/, '').split('IMDb')[0].trim() : null;
     } catch (err) {
-        console.warn(`IMDb Page Scraping failed: ${err.message}`);
+        //console.warn(`IMDb Page Scraping failed: ${err.message}`);
         return null;
     }
 }
@@ -477,7 +477,7 @@ async function stream(einthusan_id, lang) {
             einthusan_id = einthusan_id.replace("einthusan_", "");
             //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
         }
-
+        if (!einthusan_id) return;
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
 
         // Handle requestQueue promise locally
@@ -649,7 +649,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
         const url = `/movie/results/?lang=${lang}&query=${encodeURIComponent(title)}`;
         const results = await getcatalogresults(url);
         if (!Array.isArray(results) || results.length === 0) {
-            console.warn(`No results found for "${title}" in language "${lang}".`);
+            //console.warn(`No results found for "${title}" in language "${lang}".`);
             return null;
         }
 
@@ -668,7 +668,7 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
             return match.EinthusanID;
         }
 
-        console.warn(`No exact match found for "${title}" in language "${lang}".`);
+        //console.warn(`No exact match found for "${title}" in language "${lang}".`);
         return null;
     } catch (err) {
         console.error(`Error in getEinthusanIdByTitle: ${err.message}`);
@@ -852,6 +852,7 @@ async function meta(einthusan_id, lang) {
                 const imdbTitle = await ttnumberToTitle(einthusan_id).catch(() => null);
                 if (!imdbTitle) return;
                 einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);
+                if (!einthusan_id) return;
                 if (typeof einthusan_id === 'undefined') {
                     throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
                 }
@@ -871,7 +872,7 @@ async function meta(einthusan_id, lang) {
             updatedMeta.id = originalId.startsWith("tt") ? originalId : `einthusan_${einthusan_id}`;
             return updatedMeta;
         }
-
+        if (!einthusan_id) return;
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
         const response = await requestQueue.add(() => client.get(url)).catch((err) => {
             throw new Error(`Failed to fetch movie metadata: ${err.message}`);
@@ -936,7 +937,7 @@ async function meta(einthusan_id, lang) {
         return metaObj;
     } catch (e) {
         console.error("Error in meta function:", e.message);
-        return null; // Return null to indicate failure
+        return []; // Return null to indicate failure
     }
 }
 
