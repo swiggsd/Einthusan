@@ -20,7 +20,13 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
             sources.fetchRecentMoviesForAllLanguages();
 
             // Schedule the fetch every 12 hours (43200000 milliseconds)
-            setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+            const scheduleFetch = () => {
+                setTimeout(() => {
+                    sources.fetchRecentMoviesForAllLanguages();
+                    scheduleFetch(); // Recursively schedule the next fetch
+                }, 43200000);
+            };
+            scheduleFetch();
         })
         .catch((error) => {
             console.error("Login failed. Running fetch directly:", error.message);
@@ -28,30 +34,53 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
             sources.fetchRecentMoviesForAllLanguages();
 
             // Schedule the fetch every 12 hours (43200000 milliseconds)
-            setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+            const scheduleFetch = () => {
+                setTimeout(() => {
+                    sources.fetchRecentMoviesForAllLanguages();
+                    scheduleFetch(); // Recursively schedule the next fetch
+                }, 43200000);
+            };
+            scheduleFetch();
         });
 
     // Schedule the login function to run every 24 hours (86400000 milliseconds)
-    setInterval(sources.initializeClientWithSession, 86400000);
+    const scheduleLogin = () => {
+        setTimeout(() => {
+            sources.initializeClientWithSession().then(scheduleLogin); // Recursively schedule the next login
+        }, 86400000);
+    };
+    scheduleLogin();
 } else {
     // If login credentials are not set, run the fetch function directly
     console.log('Environment variables LOGIN_EMAIL and LOGIN_PASSWORD are not defined. Running fetch directly.');
     sources.fetchRecentMoviesForAllLanguages();
 
     // Schedule the fetch every 12 hours (43200000 milliseconds)
-    setInterval(sources.fetchRecentMoviesForAllLanguages, 43200000);
+    const scheduleFetch = () => {
+        setTimeout(() => {
+            sources.fetchRecentMoviesForAllLanguages();
+            scheduleFetch(); // Recursively schedule the next fetch
+        }, 43200000);
+    };
+    scheduleFetch();
 }
 
 app.set('trust proxy', true);
 
-// Timeout middleware
+// Combined timeout and cache headers middleware
 app.use((req, res, next) => {
-    req.setTimeout(120 * 1000); // Set timeout to 120 seconds
+    // Set timeout to 120 seconds
+    req.setTimeout(120 * 1000);
+// Handle timeout event
     req.socket.removeAllListeners('timeout');
     req.socket.once('timeout', () => {
         req.timedout = true;
-        res.status(504).end();
+        res.status(504).end(); // Send a 504 Gateway Timeout response
     });
+    // Set cache headers with max-age of 12 hours (43200 seconds)
+    res.setHeader('Cache-Control', 'max-age=43200, stale-while-revalidate');
+    res.setHeader('Content-Type', 'application/json');
+    // Continue to the next middleware or route handler if the request hasn't timed out
     if (!req.timedout) next();
 });
 
@@ -67,15 +96,11 @@ app.get('/', (_, res) => res.redirect('/configure/'));
 
 // Serve index.html with cache control
 app.get('/:configuration?/configure/', (_, res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'vue', 'dist', 'index.html'));
 });
 
 // Serve manifest.json
 app.get('/manifest.json', (_, res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
     manifest.behaviorHints.configurationRequired = true;
     manifest.catalogs = [];
     return res.json(manifest);
@@ -126,7 +151,6 @@ function capitalizeFirstLetter(string) {
 
 // Serve manifest.json with optional RPDB key
 app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
-    setCommonHeaders(res);
     const { rpdbKey, configuration } = req.params; // Extract path parameters
 
     if (config.langs.includes(configuration)) {
@@ -160,16 +184,9 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
     return res.status(400).send({ error: "Invalid configuration" });
 });
 
-// Utility function to set common headers
-const setCommonHeaders = (res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
-};
-
 // Handle catalog requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     try {
-        setCommonHeaders(res);
         const { rpdbKey, configuration, id, extra } = req.params;
 
         let metas;
@@ -203,7 +220,6 @@ app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, 
 // Handle movie stream requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     try {
-        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let streams;
@@ -221,7 +237,6 @@ app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, r
 // Handle movie meta requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
     try {
-        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let meta;

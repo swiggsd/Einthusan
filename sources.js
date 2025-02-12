@@ -367,7 +367,7 @@ async function ttnumberToTitle(ttNumber, retries = 5) {
 
     return fetchPromise
         .catch((error) => {
-            console.error(`Failed to fetch title for IMDb ID: ${ttNumber}`, error);
+            console.warn(`Failed to fetch title for IMDb ID: ${ttNumber}`, error.message);
             promiseCache.delete(ttNumber); // Remove failed promise from cache
             throw error;
         })
