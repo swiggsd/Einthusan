@@ -18,58 +18,69 @@ const cache = new NodeCache({
     useClones: false, // Disable cloning for better performance
     maxKeys: 10000 // Limit cache size
 });
-
 // Function to fetch recent movies for all languages
+let isFirstRun = true;
 const fetchRecentMoviesForAllLanguages = async (maxPages = 15) => {
-    try {
-        const results = {};
-        const fetchPromises = config.langs.map(async (lang) => {
+    const results = {};
+    let newMoviesAdded = false; // Track if new movies were added during this run
+
+    const fetchMoviesForLanguage = async (lang) => {
+        const cacheKey = `recent_movies_${lang}_${maxPages}`;
+        const cached = cache.get(cacheKey);
+
+        if (cached) {
+            const cachedMovies = decompressData(cached);
+            let newMovies = [];
+
             try {
-                const cacheKey = `recent_movies_${lang}_${maxPages}`;
-                const cached = cache.get(cacheKey);
-                if (cached) {
-                    const cachedMovies = decompressData(cached);
-                    let newMovies = [];
-                    try {
-                        newMovies = await getAllRecentMovies(2, lang, false);
-                    } catch (error) {
-                        console.error(`Error fetching new movies for ${lang}:`, error);
-                    }
-                    const updatedMovies = newMovies.filter(movie => 
-                        !cachedMovies.some(cachedMovie => cachedMovie.EinthusanID === movie.EinthusanID)
-                    );
+                newMovies = await getAllRecentMovies(2, lang, false, true);
+            } catch (error) {
+                console.error(`Error fetching new movies for ${lang}:`, error);
+            }
 
-                    if (updatedMovies.length > 0) {
-                        const updatedCache = updatedMovies.concat(cachedMovies);
-                        cache.set(cacheKey, compressData(updatedCache), 604800);
-                        console.info(`Added ${updatedMovies.length} new movies for ${capitalizeFirstLetter(lang)}`);
-                    }
+            const uniqueNewMovies = newMovies.filter(
+                (newMovie) => !cachedMovies.some((cachedMovie) => cachedMovie.EinthusanID === newMovie.EinthusanID)
+            );
 
-                    results[lang] = cachedMovies || [];
-                } else {
-                    results[lang] = await getAllRecentMovies(maxPages, lang, false);
-                }
+            if (uniqueNewMovies.length > 0) {
+                const updatedCache = uniqueNewMovies.concat(cachedMovies);
+                cache.set(cacheKey, compressData(updatedCache), 604800);
+                console.info(`Added ${uniqueNewMovies.length} new movies for ${capitalizeFirstLetter(lang)}`);
+                results[lang] = updatedCache;
+                newMoviesAdded = true; // Mark that new movies were added
+            } else {
+                results[lang] = cachedMovies;
+            }
+        } else {
+            try {
+                results[lang] = await getAllRecentMovies(maxPages, lang, false);
+                cache.set(cacheKey, compressData(results[lang]), 604800);
+                newMoviesAdded = true; // Mark that new movies were added (since cache was empty)
             } catch (error) {
                 console.error(`Error fetching movies for language ${lang}:`, error);
                 results[lang] = [];
             }
-        });
+        }
+    };
 
-        await Promise.all(fetchPromises);
-        
-        console.info(`=== Final Summary ===`);
-        Object.entries(results).forEach(([lang, movies]) => {
-            console.info(`Fetched ${movies.length} recent movies in ${capitalizeFirstLetter(lang)}`);
-        });
+    try {
+        await Promise.all(config.langs.map((lang) => fetchMoviesForLanguage(lang)));
 
+        // Log final summary only on the first run or if new movies are found
+        if (isFirstRun || newMoviesAdded) {
+            console.info(`=== Final Summary ===`);
+            Object.entries(results).forEach(([lang, movies]) => {
+                console.info(`Fetched ${movies.length} recent movies in ${capitalizeFirstLetter(lang)}`);
+            });
+        }
+
+        isFirstRun = false; // Mark first run as complete after the first execution
         return results;
     } catch (error) {
         console.error("Error Fetching Movies For All Languages:", error);
         return {};
     }
-};
-
-
+}
 
 const jar = new CookieJar();
 
@@ -677,9 +688,10 @@ async function getEinthusanIdByTitle(title, lang, ttnumber) {
 }
 
 // Optimized function to get all recent movies with parallel processing
-async function getAllRecentMovies(maxPages, lang, logSummary = false) {
+async function getAllRecentMovies(maxPages, lang, logSummary = false, forceFetch = false) {
     const cacheKey = `recent_movies_${lang}_${maxPages}`;
-    const cached = cache.get(cacheKey);
+    const cached = !forceFetch && cache.get(cacheKey); // Skip cache if forceFetch is true
+
     if (cached) {
         if (logSummary) {
             console.log(`${useColors ? '\x1b[32m' : ''}Cache Hit For Recent Movies:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[36m' : ''}${capitalizeFirstLetter(lang)}${useColors ? '\x1b[0m' : ''}, ${useColors ? '\x1b[33m' : ''}Max Pages:${useColors ? '\x1b[0m' : ''} ${useColors ? '\x1b[32m' : ''}${maxPages}${useColors ? '\x1b[0m' : ''}`);
@@ -788,7 +800,7 @@ async function getAllRecentMovies(maxPages, lang, logSummary = false) {
                 );
 
                 const validMovies = movies.filter(Boolean);
-                console.info(`Fetched ${validMovies.length} Movies From Page: ${page} In Language: ${capitalizeFirstLetter(lang)}`);
+                //console.info(`Fetched ${validMovies.length} Movies From Page: ${page} In Language: ${capitalizeFirstLetter(lang)}`);
                 return validMovies;
             } catch (err) {
                 if (retries > 0) {

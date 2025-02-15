@@ -24,7 +24,7 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
                 setTimeout(() => {
                     sources.fetchRecentMoviesForAllLanguages();
                     scheduleFetch(); // Recursively schedule the next fetch
-                }, 43200000);
+                }, 3600000);
             };
             scheduleFetch();
         })
@@ -38,7 +38,7 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
                 setTimeout(() => {
                     sources.fetchRecentMoviesForAllLanguages();
                     scheduleFetch(); // Recursively schedule the next fetch
-                }, 43200000);
+                }, 3600000);
             };
             scheduleFetch();
         });
@@ -60,7 +60,7 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
         setTimeout(() => {
             sources.fetchRecentMoviesForAllLanguages();
             scheduleFetch(); // Recursively schedule the next fetch
-        }, 43200000);
+        }, 3600000);
     };
     scheduleFetch();
 }
@@ -77,8 +77,8 @@ app.use((req, res, next) => {
         req.timedout = true;
         res.status(504).end(); // Send a 504 Gateway Timeout response
     });
-    // Set cache headers with max-age of 12 hours (43200 seconds)
-    res.setHeader('Cache-Control', 'max-age=43200, stale-while-revalidate');
+    // Set cache headers with max-age of 1 hour (3600 seconds)
+    res.setHeader('Cache-Control', 'max-age=3600, stale-while-revalidate');
     res.setHeader('Content-Type', 'application/json');
     // Continue to the next middleware or route handler if the request hasn't timed out
     if (!req.timedout) next();
