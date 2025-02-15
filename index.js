@@ -64,10 +64,13 @@ if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
     };
     scheduleFetch();
 }
-
+// Enable CORS
+app.use(cors());
 app.set('trust proxy', true);
+// Serve static files
+app.use('/configure', express.static(path.join(__dirname, 'vue', 'dist')));
+app.use('/assets', express.static(path.join(__dirname, 'vue', 'dist', 'assets')));
 
-// Combined timeout and cache headers middleware
 app.use((req, res, next) => {
     // Set timeout to 120 seconds
     req.setTimeout(120 * 1000);
@@ -77,30 +80,29 @@ app.use((req, res, next) => {
         req.timedout = true;
         res.status(504).end(); // Send a 504 Gateway Timeout response
     });
-    // Set cache headers with max-age of 1 hour (3600 seconds)
-    res.setHeader('Cache-Control', 'max-age=3600, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
-    // Continue to the next middleware or route handler if the request hasn't timed out
     if (!req.timedout) next();
 });
 
-// Serve static files
-app.use('/configure', express.static(path.join(__dirname, 'vue', 'dist')));
-app.use('/assets', express.static(path.join(__dirname, 'vue', 'dist', 'assets')));
-
-// Enable CORS
-app.use(cors());
+// Utility function to set common headers
+const setCommonHeaders = (res) => {
+    res.setHeader('Cache-Control', 'max-age=3600, stale-while-revalidate');
+    res.setHeader('Content-Type', 'application/json');
+};
 
 // Redirect root to /configure
 app.get('/', (_, res) => res.redirect('/configure/'));
 
 // Serve index.html with cache control
 app.get('/:configuration?/configure/', (_, res) => {
+    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+    res.setHeader('Content-Type', 'text/html');
     res.sendFile(path.join(__dirname, 'vue', 'dist', 'index.html'));
 });
 
 // Serve manifest.json
 app.get('/manifest.json', (_, res) => {
+    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+    res.setHeader('Content-Type', 'application/json');
     manifest.behaviorHints.configurationRequired = true;
     manifest.catalogs = [];
     return res.json(manifest);
@@ -151,6 +153,8 @@ function capitalizeFirstLetter(string) {
 
 // Serve manifest.json with optional RPDB key
 app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
+    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+    res.setHeader('Content-Type', 'application/json');
     const { rpdbKey, configuration } = req.params; // Extract path parameters
 
     if (config.langs.includes(configuration)) {
@@ -187,6 +191,7 @@ app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
 // Handle catalog requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id, extra } = req.params;
 
         let metas;
@@ -220,6 +225,7 @@ app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, 
 // Handle movie stream requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let streams;
@@ -237,6 +243,7 @@ app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, r
 // Handle movie meta requests with optional RPDB key
 app.get('/:rpdbKey?/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
     try {
+        setCommonHeaders(res);
         const { rpdbKey, configuration, id } = req.params;
 
         let meta;
