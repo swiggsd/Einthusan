@@ -4,203 +4,211 @@ const path = require('path');
 const sources = require("./sources");
 const config = require('./config');
 const manifest = require("./manifest");
+const schedule = require('node-schedule');
 require('dotenv').config();
+
 const app = express();
-// Global error handler for unhandled promise rejections
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Promise Rejection:', err);
+
+// Prevent multiple responses middleware
+app.use((req, res, next) => {
+    const originalSend = res.send;
+    let hasSent = false;
+
+    res.send = function (...args) {
+        if (!hasSent) {
+            hasSent = true;
+            originalSend.apply(res, args);
+        } else {
+            console.warn('Attempted to send multiple responses for request:', req.url);
+        }
+        return res;
+    };
+    next();
 });
 
+// Global error handler for unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Promise Rejection:', {
+        message: err.message,
+        stack: err.stack
+    });
+});
+
+// Constants
+const FETCH_INTERVAL = '0 */6 * * *'; // Every 6 hours
+const LOGIN_INTERVAL = '0 0 * * *'; // Every 24 hours
+const REQUEST_TIMEOUT = 120 * 1000; // 120 seconds
+
+// Initialize and schedule tasks
 if (process.env.LOGIN_EMAIL && process.env.LOGIN_PASSWORD) {
-    // If login credentials are set, run the login function first
     sources.initializeClientWithSession()
         .then(() => {
-            console.log("Login successful. Starting initial fetch of recent movies.");
-            // Initial fetch when the server starts
+            console.log("Login successful. Starting initial fetch.");
             sources.fetchRecentMoviesForAllLanguages();
 
-            // Schedule the fetch every 12 hours (43200000 milliseconds)
-            const scheduleFetch = () => {
-                setTimeout(() => {
-                    sources.fetchRecentMoviesForAllLanguages();
-                    scheduleFetch(); // Recursively schedule the next fetch
-                }, 3600000);
-            };
-            scheduleFetch();
+            schedule.scheduleJob(FETCH_INTERVAL, () => {
+                sources.fetchRecentMoviesForAllLanguages();
+            });
+
+            schedule.scheduleJob(LOGIN_INTERVAL, () => {
+                sources.initializeClientWithSession();
+            });
         })
         .catch((error) => {
-            console.error("Login failed. Running fetch directly:", error.message);
-            // Run fetchRecentMoviesForAllLanguages even if login fails
+            console.error("Login failed:", error.message);
             sources.fetchRecentMoviesForAllLanguages();
-
-            // Schedule the fetch every 12 hours (43200000 milliseconds)
-            const scheduleFetch = () => {
-                setTimeout(() => {
-                    sources.fetchRecentMoviesForAllLanguages();
-                    scheduleFetch(); // Recursively schedule the next fetch
-                }, 3600000);
-            };
-            scheduleFetch();
+            schedule.scheduleJob(FETCH_INTERVAL, () => {
+                sources.fetchRecentMoviesForAllLanguages();
+            });
         });
-
-    // Schedule the login function to run every 24 hours (86400000 milliseconds)
-    const scheduleLogin = () => {
-        setTimeout(() => {
-            sources.initializeClientWithSession().then(scheduleLogin); // Recursively schedule the next login
-        }, 86400000);
-    };
-    scheduleLogin();
 } else {
-    // If login credentials are not set, run the fetch function directly
-    console.log('Environment variables LOGIN_EMAIL and LOGIN_PASSWORD are not defined. Running fetch directly.');
+    console.log('No login credentials. Running fetch directly.');
     sources.fetchRecentMoviesForAllLanguages();
-
-    // Schedule the fetch every 12 hours (43200000 milliseconds)
-    const scheduleFetch = () => {
-        setTimeout(() => {
-            sources.fetchRecentMoviesForAllLanguages();
-            scheduleFetch(); // Recursively schedule the next fetch
-        }, 3600000);
-    };
-    scheduleFetch();
+    schedule.scheduleJob(FETCH_INTERVAL, () => {
+        sources.fetchRecentMoviesForAllLanguages();
+    });
 }
-// Enable CORS
+
+// Enable CORS and trust proxy
 app.use(cors());
 app.set('trust proxy', true);
+
+// Improved timeout middleware
+app.use((req, res, next) => {
+    req.setTimeout(REQUEST_TIMEOUT);
+
+    req.on('timeout', () => {
+        if (!res.headersSent) {
+            req.timedout = true;
+            res.status(504).end();
+        }
+    });
+
+    res.on('finish', () => {
+        req.timedout = true;
+    });
+
+    if (!req.timedout) next();
+});
+
 // Serve static files
 app.use('/configure', express.static(path.join(__dirname, 'vue', 'dist')));
 app.use('/assets', express.static(path.join(__dirname, 'vue', 'dist', 'assets')));
 
-app.use((req, res, next) => {
-    // Set timeout to 120 seconds
-    req.setTimeout(120 * 1000);
-// Handle timeout event
-    req.socket.removeAllListeners('timeout');
-    req.socket.once('timeout', () => {
-        req.timedout = true;
-        res.status(504).end(); // Send a 504 Gateway Timeout response
-    });
-    if (!req.timedout) next();
-});
-
 // Utility function to set common headers
 const setCommonHeaders = (res) => {
-    res.setHeader('Cache-Control', 'max-age=3600, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
+    if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'max-age=21600, stale-while-revalidate');
+        res.setHeader('Content-Type', 'application/json');
+    }
 };
 
 // Redirect root to /configure
-app.get('/', (_, res) => res.redirect('/configure/'));
+app.get('/', (_, res) => {
+    if (!res.headersSent) res.redirect('/configure/');
+});
 
 // Serve index.html with cache control
 app.get('/:configuration?/configure/', (_, res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'text/html');
-    res.sendFile(path.join(__dirname, 'vue', 'dist', 'index.html'));
+    if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+        res.setHeader('Content-Type', 'text/html');
+        res.sendFile(path.join(__dirname, 'vue', 'dist', 'index.html'));
+    }
 });
 
 // Serve manifest.json
 app.get('/manifest.json', (_, res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
-    manifest.behaviorHints.configurationRequired = true;
-    manifest.catalogs = [];
-    return res.json(manifest);
+    if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+        res.setHeader('Content-Type', 'application/json');
+        manifest.behaviorHints.configurationRequired = true;
+        manifest.catalogs = [];
+        return res.json(manifest);
+    }
 });
 
 async function updatePosterUrls(metas, rpdbKey) {
-    // Check if metas is valid and rpdbKey is provided
     if (!metas || !Array.isArray(metas) || !rpdbKey) return metas;
 
-    // Validate the RPDB key
     const isKeyValid = await validateRPDBKey(rpdbKey);
-
-    // If the key is invalid, return the original metas without modifying poster URLs
     if (!isKeyValid) {
         console.warn('RPDB key is invalid. Poster URLs will not be updated.');
         return metas;
     }
 
-    // If the key is valid, update poster URLs
     for (const meta of metas) {
         if (meta.id && /^tt\d+$/.test(meta.id)) {
-            const imdbId = meta.id; // IMDb ID (e.g., tt1234567)
-            // Use the RatingPosterDB URL with fallback=true
-            meta.poster = `https://api.ratingposterdb.com/${rpdbKey}/imdb/poster-default/${imdbId}.jpg?fallback=true`;
+            meta.poster = `https://api.ratingposterdb.com/${rpdbKey}/imdb/poster-default/${meta.id}.jpg?fallback=true`;
         }
     }
-
     return metas;
 }
 
-// Helper function to validate the RPDB key
 async function validateRPDBKey(rpdbKey) {
     try {
         const response = await fetch(`https://api.ratingposterdb.com/${rpdbKey}/isValid`);
         const data = await response.json();
-        return data?.valid === true; // Return true if the key is valid
+        return data?.valid === true;
     } catch (e) {
-        //console.error('Error validating RPDB key:', e);
-        return false; // Return false if validation fails
+        console.error('Error validating RPDB key:', e.message);
+        return false;
     }
 }
 
-// Utility function to capitalize the first letter
 function capitalizeFirstLetter(string) {
-    if (!string) return ''; // Handle empty strings
+    if (!string) return '';
     return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
 // Serve manifest.json with optional RPDB key
 app.get('/:rpdbKey?/:configuration/manifest.json', (req, res) => {
-    res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
-    res.setHeader('Content-Type', 'application/json');
-    const { rpdbKey, configuration } = req.params; // Extract path parameters
+    if (!res.headersSent) {
+        res.setHeader('Cache-Control', 'max-age=86400, stale-while-revalidate');
+        res.setHeader('Content-Type', 'application/json');
+        const { rpdbKey, configuration } = req.params;
 
-    if (config.langs.includes(configuration)) {
-        manifest.behaviorHints.configurationRequired = false;
-        const localizedManifest = { ...manifest };
-        localizedManifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
-        localizedManifest.catalogs = [
-            {
-                type: "movie",
-                id: configuration,
-                name: `EinthusanTV - Search - ${capitalizeFirstLetter(configuration)}`,
-                extra: [{ name: "search", isRequired: true }]
-            },
-            {
-                type: "movie",
-                id: `${configuration}_board`,
-                name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`,
-                extra: [{ name: "skip", isRequired: false }]
-            }
-        ];
+        if (config.langs.includes(configuration)) {
+            manifest.behaviorHints.configurationRequired = false;
+            const localizedManifest = { ...manifest };
+            localizedManifest.name = `EinthusanTV - ${capitalizeFirstLetter(configuration)}`;
+            localizedManifest.catalogs = [
+                {
+                    type: "movie",
+                    id: configuration,
+                    name: `EinthusanTV - Search - ${capitalizeFirstLetter(configuration)}`,
+                    extra: [{ name: "search", isRequired: true }]
+                },
+                {
+                    type: "movie",
+                    id: `${configuration}_board`,
+                    name: `EinthusanTV - Newly Added - ${capitalizeFirstLetter(configuration)}`,
+                    extra: [{ name: "skip", isRequired: false }]
+                }
+            ];
 
-        // Use the RPDB key if provided
-        if (rpdbKey) {
-            console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)} with RPDB Key:`, rpdbKey);
-        } else {
-            console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)}`);
+            console.log(`Addon Installed for Language: ${capitalizeFirstLetter(configuration)}${rpdbKey ? ` with RPDB Key: ${rpdbKey}` : ''}`);
+            return res.json(localizedManifest);
         }
-        
-        return res.json(localizedManifest);
+        return res.status(400).send({ error: "Invalid configuration" });
     }
-    return res.status(400).send({ error: "Invalid configuration" });
 });
 
-// Handle catalog requests with optional RPDB key
+// Handle catalog requests
 app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, res) => {
     try {
         setCommonHeaders(res);
-        const { rpdbKey, configuration, id, extra } = req.params;
+        //console.log(`Processing catalog request: ${req.url}`);
 
-        let metas;
+        const { rpdbKey, configuration, id, extra } = req.params;
         const catalogId = config.langs.includes(id) ? id : id.split('_')[0];
+
         if (!config.langs.includes(catalogId)) {
             return res.status(400).send({ error: "Invalid catalog ID" });
         }
 
         const searchParams = extra ? new URLSearchParams(extra) : null;
+        let metas;
 
         if (searchParams && searchParams.has("search")) {
             metas = await sources.search(catalogId, searchParams.get("search"));
@@ -210,50 +218,63 @@ app.get('/:rpdbKey?/:configuration/catalog/movie/:id/:extra?.json', async (req, 
             metas = await sources.getAllRecentMovies(15, configuration);
         }
 
-        // Update poster URLs for IMDb IDs using the helper function
         if (metas && Array.isArray(metas) && rpdbKey) {
             metas = await updatePosterUrls(metas, rpdbKey);
         }
 
+        //console.log(`Sending response for: ${req.url}`);
         return res.json({ metas });
     } catch (e) {
-        console.error(e);
-        return res.status(500).send({ error: 'An error occurred while processing your request.' });
+        console.error(`Error in catalog request ${req.url}:`, e);
+        if (!res.headersSent) {
+            return res.status(500).send({ error: 'An error occurred while processing your request.' });
+        }
     }
 });
 
-// Handle movie stream requests with optional RPDB key
+// Handle movie stream requests
 app.get('/:rpdbKey?/:configuration/stream/movie/:id/:extra?.json', async (req, res) => {
     try {
         setCommonHeaders(res);
-        const { rpdbKey, configuration, id } = req.params;
+        //console.log(`Processing stream request: ${req.url}`);
 
+        const { rpdbKey, configuration, id } = req.params;
         let streams;
+
         if (id.startsWith("einthusan") || id.startsWith("tt")) {
             streams = await sources.stream(id, configuration);
         }
 
+        //console.log(`Sending response for: ${req.url}`);
         return res.json({ streams: streams?.streams || [] });
     } catch (e) {
-        console.error(e);
-        return res.status(500).send({ error: 'Internal Server Error' });
+        console.error(`Error in stream request ${req.url}:`, e);
+        if (!res.headersSent) {
+            return res.status(500).send({ error: 'Internal Server Error' });
+        }
     }
 });
 
-// Handle movie meta requests with optional RPDB key
+// Handle movie meta requests
 app.get('/:rpdbKey?/:configuration/meta/movie/:id/:extra?.json', async (req, res) => {
     try {
         setCommonHeaders(res);
-        const { rpdbKey, configuration, id } = req.params;
+        //console.log(`Processing meta request: ${req.url}`);
 
+        const { rpdbKey, configuration, id } = req.params;
         let meta;
+
         if (id.startsWith("einthusan") || id.startsWith("tt")) {
             meta = await sources.meta(id, configuration);
         }
+
+        //console.log(`Sending response for: ${req.url}`);
         return res.json({ meta: meta || [] });
     } catch (e) {
-        console.error(e);
-        return res.status(500).send({ error: 'Internal Server Error' });
+        console.error(`Error in meta request ${req.url}:`, e);
+        if (!res.headersSent) {
+            return res.status(500).send({ error: 'Internal Server Error' });
+        }
     }
 });
 
