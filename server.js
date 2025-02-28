@@ -9,5 +9,5 @@ app.listen((config.port), function () {
     //console.log(`HTTP addon accessible at: ${config.local}/configure`);
 });
 
-publishToCentral("https://einthusantv-k9mh.onrender.com/manifest.json").catch((e)=>{console.error(e)})
+publishToCentral("https://einthusan.asaddon.com/manifest.json").catch((e)=>{console.error(e)})
 
