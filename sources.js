@@ -538,7 +538,7 @@ async function stream(einthusan_id, lang) {
 
 async function search(lang, slug) {
     if (!lang || !slug) {
-        console.error("Error: Missing 'lang' or 'slug' parameter.");
+        //console.error("Error: Missing 'lang' or 'slug' parameter.");
         return null;
     }
 
@@ -648,7 +648,7 @@ async function getcatalogresults(url) {
 // Optimized function to get Einthusan ID by title
 async function getEinthusanIdByTitle(title, lang, ttnumber) {
     if (!title || !lang) {
-        console.error("Error: Missing 'title' or 'lang' parameter.");
+        //console.error("Error: Missing 'title' or 'lang' parameter.");
         return null;
     }
 
@@ -948,7 +948,7 @@ async function meta(einthusan_id, lang) {
         cache.set(cacheKey, metaObj);
         return metaObj;
     } catch (e) {
-        console.error("Error in meta function:", e.message);
+        //console.error("Error in meta function:", e.message);
         return []; // Return null to indicate failure
     }
 }

@@ -151,7 +151,7 @@ async function validateRPDBKey(rpdbKey) {
         const data = await response.json();
         return data?.valid === true;
     } catch (e) {
-        console.error('Error validating RPDB key:', e.message);
+        //console.error('Error validating RPDB key:', e.message);
         return false;
     }
 }
