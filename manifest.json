@@ -10,7 +10,7 @@
     "types": ["movie"],
     "idPrefixes": ["tt","einthusan"],
     "behaviorHints": {
-        "configurable": false,
+        "configurable": true,
         "configurationRequired": true
     }
 }
