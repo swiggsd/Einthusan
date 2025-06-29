@@ -438,7 +438,7 @@ const replaceIpInLink = (link) => {
 async function stream(einthusan_id, lang) {
     if (typeof lang === 'undefined') {
         console.error("Error: 'lang' Parameter Is Undefined.");
-        return;
+        return null;
     }
 
     const imdb = einthusan_id;
@@ -452,55 +452,42 @@ async function stream(einthusan_id, lang) {
         return cachedResult;
     }
 
-    try {
-        let title;
-        let validEinthusanId = false;
+    // Define multiple proxy options
+    const proxyUrls = [
+        process.env.PROXY_URL_1 || 'https://rootedd-mp.hf.space/proxy',
+        process.env.PROXY_URL_2 || 'https://proxy.example.com/proxy', // Replace with a backup proxy
+        // Add more proxies as needed
+    ];
 
-        if (einthusan_id.startsWith("tt")) {
-            const cacheKeyForMovies = `recent_movies_${lang}_15`;
-            const cachedMovies = cache.get(cacheKeyForMovies);
-
-            let mappedEinthusanId;
-            if (cachedMovies) {
-                const movies = decompressData(cachedMovies);
-                const movie = movies.find(m => m.id === einthusan_id);
-                if (movie) {
-                    mappedEinthusanId = movie.EinthusanID;
-                    //console.info(`${useColors ? '\x1b[32m' : ''}Found Mapping For IMDB ID: ${einthusan_id} => EinthusanID: ${mappedEinthusanId}${useColors ? '\x1b[0m' : ''}`);
+    // Function to test proxy availability
+    async function testProxy(proxyUrl, mp4Link) {
+        try {
+            const response = await axios.head(`${proxyUrl}?url=${encodeURIComponent(mp4Link)}`, {
+                timeout: 5000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Referer': 'https://einthusan.tv/',
+                    'Origin': 'https://einthusan.tv'
                 }
-            }
-
-            if (mappedEinthusanId) {
-                einthusan_id = mappedEinthusanId;
-            } else {
-                // Handle ttnumberToTitle promise locally
-                const imdbTitle = await ttnumberToTitle(einthusan_id).catch(() => null);
-                if (!imdbTitle) return;
-
-                // Handle getEinthusanIdByTitle promise locally
-                einthusan_id = await getEinthusanIdByTitle(imdbTitle, lang, einthusan_id).catch(() => null);
-                if (typeof einthusan_id === 'undefined') {
-                    throw new Error(`Einthusan ID could not be retrieved for Title: ${imdbTitle} in Language: ${capitalizeFirstLetter(lang)}`);
-                }
-            }
-        } else {
-            // If einthusan_id is not a ttnumber (IMDB ID), assume it's already an Einthusan ID
-            einthusan_id = einthusan_id.replace("einthusan_", "");
-            //console.info(`Using provided Einthusan ID: ${einthusan_id}`);
+            });
+            console.info(`Proxy ${proxyUrl} is alive: Status ${response.status}`);
+            return response.status === 200;
+        } catch (err) {
+            console.warn(`Proxy ${proxyUrl} test failed: ${err.message}`);
+            return false;
         }
-        if (!einthusan_id) return;
+    }
+
+    // Main stream logic
+    try {
+        // Fetch the movie page
         const url = `${config.BaseURL}/movie/watch/${einthusan_id}/`;
-
-        // Handle requestQueue promise locally
-        const response = await requestQueue.add(() => client.get(url)).catch((err) => {
-            throw new Error(`Failed to fetch movie details: ${err.message}`);
-        });
-
+        const response = await requestQueue.add(() => client.get(url));
         const $ = cheerio.load(response.data);
         const videoSection = $('#UIVideoPlayer');
         if (!videoSection.length) throw new Error(`Video player section not found using URL: ${url}`);
 
-        title = videoSection.attr("data-content-title");
+        const title = videoSection.attr("data-content-title");
         const year = $('#UIMovieSummary div.info p').contents().first().text().trim();
         const mp4Link = replaceIpInLink(videoSection.attr('data-mp4-link'));
 
@@ -510,8 +497,6 @@ async function stream(einthusan_id, lang) {
         if (!languageCheck.includes(lang.toLowerCase())) {
             throw new Error(`The Einthusan ID: ${einthusan_id} is not valid for the language: ${lang}`);
         }
-
-        validEinthusanId = true;
 
         const capitalizedLang = capitalizeFirstLetter(lang);
         const result = {
